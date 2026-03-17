@@ -6,7 +6,7 @@ Mattermost + GitHub/Radicle + intelligent agents working together. Built for **s
 
 ## Vision
 
-Enable 1+ people to orchestrate a suite of AI agents for code collaboration, task automation, and knowledge management. The point is not ideology—the point is **effectiveness and nimble development**.
+Secure enough for friends multiplayer and multiagent collaboration.
 
 ## Architecture
 
