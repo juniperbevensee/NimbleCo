@@ -52,9 +52,9 @@ temp/
 workspace/
 !workspace/.gitkeep
 
-# Runtime storage
-storage/
-!storage/.gitkeep
+# Runtime storage (root level only, not shared/tools/src/storage)
+/storage/
+!/storage/.gitkeep
 
 # Claude Code local settings
 .claude/
