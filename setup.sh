@@ -684,7 +684,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 NATS_URL=${NATS_URL:-nats://localhost:4222}
-DATABASE_URL=${DATABASE_URL:-postgresql://agent:password@localhost:5432/nimbleco}
+DATABASE_URL=${DATABASE_URL:-postgresql://agent:change-this-password@localhost:5432/nimbleco}
 
 echo -e "${GREEN}✓${NC} NATS: $NATS_URL"
 echo -e "${GREEN}✓${NC} PostgreSQL: $DATABASE_URL"
