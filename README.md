@@ -384,14 +384,14 @@ See [Security Hardening Guide](./docs/security-hardening.md) for implementation 
 
 ## Roadmap
 
-### Phase 1: MVP (Current)
+### Phase 1: MVP (complete)
 - NATS-based communication
 - Basic coordinator with Mattermost integration
 - Code review agent + Universal agent
 - Local + cloud LLM support
 - Tool permission system
 
-### Phase 2: Enhanced Features
+### Phase 2: Enhanced Features (in progress)
 - Visual workflow builder
 - Real-time agent dashboard
 - More specialist agents
