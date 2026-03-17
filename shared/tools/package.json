@@ -1,0 +1,26 @@
+{
+  "name": "@nimbleco/tools",
+  "version": "0.1.0",
+  "description": "MCP-compatible tools and integrations for NimbleCo",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "@octokit/rest": "^20.0.2",
+    "ical-generator": "^7.0.0",
+    "open-measures": "github:juniperbevensee/open-measures-ts",
+    "pg": "^8.20.0",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.18.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,112 @@
+# Daily Standup Workflow
+# Triggered by: Cron (every day at 9am)
+
+name: Daily Standup Summary
+description: Aggregate yesterday's activity and post summary
+
+inputs:
+  date:
+    description: Date for standup (defaults to today)
+    required: false
+    default: ${{ workflow.date }}
+
+steps:
+  # Get yesterday's handoffs
+  - name: fetch-handoffs
+    agent: coordinator
+    action: search_mattermost
+    inputs:
+      channel: "#handoffs"
+      after: "24 hours ago"
+      limit: 10
+    outputs:
+      - messages
+      - count
+
+  # Get completed PRs
+  - name: fetch-prs
+    agent: coordinator
+    action: github_list_prs
+    inputs:
+      state: "closed"
+      merged_after: "24 hours ago"
+    outputs:
+      - prs
+      - count
+
+  # Get test results
+  - name: fetch-test-results
+    agent: coordinator
+    action: query_database
+    inputs:
+      query: |
+        SELECT COUNT(*) as total_tests, SUM(CASE WHEN status = 'passed' THEN 1 ELSE 0 END) as passed
+        FROM test_runs
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+    outputs:
+      - total_tests
+      - passed_tests
+
+  # Aggregate summary
+  - name: create-summary
+    agent: coordinator
+    action: aggregate
+    inputs:
+      handoffs: ${{ steps.fetch-handoffs.outputs }}
+      prs: ${{ steps.fetch-prs.outputs }}
+      tests: ${{ steps.fetch-test-results.outputs }}
+    outputs:
+      - summary_text
+
+  # Create Notion page
+  - name: create-notion-page
+    agent: coordinator
+    action: create_notion_page
+    tool: create_notion_page
+    inputs:
+      parent_id: ${{ env.NOTION_STANDUP_DB }}
+      title: "Standup - ${{ inputs.date }}"
+      content: |
+        # Daily Standup - ${{ inputs.date }}
+
+        ## Yesterday's Activity
+
+        ### Handoffs
+        ${{ steps.fetch-handoffs.outputs.count }} handoff(s)
+
+        ${{ steps.fetch-handoffs.outputs.messages }}
+
+        ### PRs Merged
+        ${{ steps.fetch-prs.outputs.count }} PR(s) merged
+
+        ${{ steps.fetch-prs.outputs.prs }}
+
+        ### Tests
+        - Total: ${{ steps.fetch-test-results.outputs.total_tests }}
+        - Passed: ${{ steps.fetch-test-results.outputs.passed_tests }}
+        - Success Rate: ${{ (steps.fetch-test-results.outputs.passed_tests / steps.fetch-test-results.outputs.total_tests * 100).toFixed(1) }}%
+
+        ## Summary
+
+        ${{ steps.create-summary.outputs.summary_text }}
+
+  # Post to Mattermost
+  - name: post-standup
+    agent: coordinator
+    action: post_to_mattermost
+    inputs:
+      channel: "#standup"
+      message: |
+        📊 **Daily Standup - ${{ inputs.date }}**
+
+        **Yesterday:**
+        - ${{ steps.fetch-handoffs.outputs.count }} handoffs
+        - ${{ steps.fetch-prs.outputs.count }} PRs merged
+        - ${{ steps.fetch-test-results.outputs.passed_tests }}/${{ steps.fetch-test-results.outputs.total_tests }} tests passed
+
+        [Full notes in Notion](${{ steps.create-notion-page.outputs.page_url }})
+
+settings:
+  timeout: 180
+  retry_on_failure: 1
+  schedule: "0 9 * * *"  # Every day at 9am

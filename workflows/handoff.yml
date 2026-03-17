@@ -1,0 +1,110 @@
+# Shift Handoff Workflow
+# Triggered by: @handoff-bot mention in Mattermost
+
+name: Shift Handoff
+description: Parse handoff message, update Notion, create calendar events
+
+inputs:
+  message_content:
+    description: Handoff message from Mattermost
+    required: true
+  author:
+    description: Person ending shift
+    required: true
+  channel_id:
+    description: Mattermost channel ID
+    required: true
+
+steps:
+  # Parse handoff message
+  - name: parse-handoff
+    agent: coordinator
+    action: parse_handoff_message
+    inputs:
+      content: ${{ inputs.message_content }}
+    outputs:
+      - summary
+      - branch_name
+      - worktree_path
+      - last_commit
+      - tests_passing
+      - blockers
+      - next_steps
+      - next_person
+      - next_shift_start
+
+  # Update Notion current status page
+  - name: update-notion
+    agent: coordinator
+    action: update_notion_page
+    tool: append_to_notion_page
+    inputs:
+      page_id: ${{ env.NOTION_CURRENT_STATUS_PAGE }}
+      content: |
+        ## Handoff: ${{ inputs.author }} → ${{ steps.parse-handoff.outputs.next_person }}
+        **Date:** ${{ workflow.timestamp }}
+        **Branch:** `${{ steps.parse-handoff.outputs.branch_name }}`
+        **Last Commit:** ${{ steps.parse-handoff.outputs.last_commit }}
+        **Tests:** ${{ steps.parse-handoff.outputs.tests_passing ? '✅ Passing' : '❌ Failing' }}
+
+        **Summary:**
+        ${{ steps.parse-handoff.outputs.summary }}
+
+        **Blockers:**
+        ${{ steps.parse-handoff.outputs.blockers || 'None' }}
+
+        **Next Steps:**
+        ${{ steps.parse-handoff.outputs.next_steps }}
+
+        ---
+
+  # Create calendar event for next shift
+  - name: create-shift-event
+    agent: coordinator
+    action: create_calendar_event
+    tool: create_calendar_event
+    inputs:
+      title: "${{ steps.parse-handoff.outputs.next_person }} on duty"
+      start_time: ${{ steps.parse-handoff.outputs.next_shift_start }}
+      end_time: ${{ steps.parse-handoff.outputs.next_shift_start + 8h }}  # 8 hour shift
+      description: |
+        Previous: ${{ inputs.author }}
+        Branch: ${{ steps.parse-handoff.outputs.branch_name }}
+        Worktree: ${{ steps.parse-handoff.outputs.worktree_path }}
+    condition: ${{ steps.parse-handoff.outputs.next_shift_start != null }}
+
+  # Upload worktree snapshot
+  - name: snapshot-worktree
+    agent: coordinator
+    action: upload_file
+    tool: upload_file
+    inputs:
+      file_path: ${{ steps.parse-handoff.outputs.worktree_path }}/.tar.gz
+      destination: handoffs/${{ workflow.timestamp }}-${{ inputs.author }}.tar.gz
+      metadata:
+        author: ${{ inputs.author }}
+        branch: ${{ steps.parse-handoff.outputs.branch_name }}
+        commit: ${{ steps.parse-handoff.outputs.last_commit }}
+    condition: ${{ steps.parse-handoff.outputs.worktree_path != null }}
+
+  # Post summary to #general
+  - name: notify-team
+    agent: coordinator
+    action: post_to_mattermost
+    inputs:
+      channel: "#general"
+      message: |
+        🔄 **Shift Handoff**
+
+        ${{ inputs.author }} → ${{ steps.parse-handoff.outputs.next_person }}
+
+        **Branch:** `${{ steps.parse-handoff.outputs.branch_name }}`
+        **Status:** ${{ steps.parse-handoff.outputs.summary }}
+        **Tests:** ${{ steps.parse-handoff.outputs.tests_passing ? '✅' : '❌' }}
+
+        [Full handoff in Notion](${{ steps.update-notion.outputs.page_url }})
+    condition: always
+
+settings:
+  timeout: 120  # 2 minutes
+  retry_on_failure: 0

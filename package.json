@@ -1,0 +1,50 @@
+{
+  "name": "nimbleco",
+  "version": "0.1.0",
+  "description": "Self-hosted agent orchestration platform",
+  "private": true,
+  "workspaces": [
+    "coordinator",
+    "agents/*",
+    "shared/*",
+    "dashboard"
+  ],
+  "scripts": {
+    "start": "./scripts/dev.sh",
+    "restart": "./scripts/restart.sh",
+    "stop": "./scripts/stop.sh",
+    "setup": "./setup.sh",
+    "build": "npm run build --workspaces",
+    "clean": "npm run clean --workspaces && rm -rf node_modules",
+    "dev:docker": "docker-compose up",
+    "dev:full": "docker-compose --profile full up",
+    "dev:monitoring": "docker-compose --profile monitoring up",
+    "coordinator": "cd coordinator && npm run dev",
+    "agent:universal": "cd agents/universal && npm run dev",
+    "task:create": "node scripts/create-task.js",
+    "db:migrate": "cd coordinator && npm run db:migrate",
+    "db:seed": "cd coordinator && npm run db:seed",
+    "test": "npm run test --workspaces",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "mark-failures": "ts-node scripts/mark-system-failures.ts"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.7.0",
+    "pm2": "^5.3.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {}
+}

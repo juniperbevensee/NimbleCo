@@ -1,0 +1,22 @@
+{
+  "name": "@nimbleco/agent-universal",
+  "version": "0.1.0",
+  "description": "Universal agent that can assume any role with dynamic tool access",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@nimbleco/llm-adapters": "*",
+    "@nimbleco/tools": "*",
+    "nats": "^2.15.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0"
+  }
+}

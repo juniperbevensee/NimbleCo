@@ -1,0 +1,123 @@
+# PR Review Workflow
+# Triggered when: task type = "pr-review"
+
+name: Pull Request Review
+description: Comprehensive PR review with code analysis, security scan, and tests
+
+# Workflow inputs
+inputs:
+  pr_url:
+    description: GitHub PR URL
+    required: true
+  pr_number:
+    description: PR number (extracted from URL)
+    required: false
+  repo_owner:
+    description: Repository owner
+    required: false
+  repo_name:
+    description: Repository name
+    required: false
+
+# Workflow steps (executed in order)
+steps:
+  # Step 1: Extract PR metadata
+  - name: extract-pr-info
+    agent: coordinator
+    action: extract_pr_metadata
+    inputs:
+      pr_url: ${{ inputs.pr_url }}
+    outputs:
+      - pr_number
+      - repo_owner
+      - repo_name
+      - branch_name
+      - author
+
+  # Step 2: Run agents in parallel
+  - name: parallel-analysis
+    parallel: true
+    steps:
+      # Code review
+      - name: code-review
+        agent: code-review
+        action: review_pr
+        inputs:
+          pr_url: ${{ inputs.pr_url }}
+          pr_number: ${{ steps.extract-pr-info.outputs.pr_number }}
+          repo_owner: ${{ steps.extract-pr-info.outputs.repo_owner }}
+          repo_name: ${{ steps.extract-pr-info.outputs.repo_name }}
+        outputs:
+          - review_comments
+          - issues_found
+          - rating
+
+      # Security scan
+      - name: security-scan
+        agent: security
+        action: scan_pr
+        inputs:
+          pr_url: ${{ inputs.pr_url }}
+          branch: ${{ steps.extract-pr-info.outputs.branch_name }}
+        outputs:
+          - vulnerabilities
+          - severity
+          - safe_to_merge
+
+      # Run tests
+      - name: run-tests
+        agent: test-runner
+        action: run_tests
+        inputs:
+          pr_url: ${{ inputs.pr_url }}
+          branch: ${{ steps.extract-pr-info.outputs.branch_name }}
+        outputs:
+          - test_results
+          - coverage
+          - tests_passed
+
+  # Step 3: Aggregate results
+  - name: aggregate-results
+    agent: coordinator
+    action: aggregate
+    inputs:
+      code_review: ${{ steps.parallel-analysis.code-review.outputs }}
+      security: ${{ steps.parallel-analysis.security-scan.outputs }}
+      tests: ${{ steps.parallel-analysis.run-tests.outputs }}
+    outputs:
+      - summary
+      - recommendation
+
+  # Step 4: Post to Mattermost
+  - name: notify-mattermost
+    agent: coordinator
+    action: post_to_mattermost
+    inputs:
+      channel: ${{ env.MATTERMOST_CHANNEL }}
+      message: |
+        ## 🔍 PR Review Complete
+
+        **PR:** ${{ inputs.pr_url }}
+        **Author:** ${{ steps.extract-pr-info.outputs.author }}
+        **Branch:** ${{ steps.extract-pr-info.outputs.branch_name }}
+
+        **Code Review:** ${{ steps.parallel-analysis.code-review.outputs.rating }}/10
+        - Issues: ${{ steps.parallel-analysis.code-review.outputs.issues_found }}
+
+        **Security:** ${{ steps.parallel-analysis.security-scan.outputs.severity }}
+        - Vulnerabilities: ${{ steps.parallel-analysis.security-scan.outputs.vulnerabilities }}
+        - Safe to merge: ${{ steps.parallel-analysis.security-scan.outputs.safe_to_merge }}
+
+        **Tests:** ${{ steps.parallel-analysis.run-tests.outputs.tests_passed ? 'PASS ✅' : 'FAIL ❌' }}
+        - Coverage: ${{ steps.parallel-analysis.run-tests.outputs.coverage }}%
+
+        **Recommendation:** ${{ steps.aggregate-results.outputs.recommendation }}
+    condition: always  # Post even if previous steps fail
+
+# Workflow settings
+settings:
+  timeout: 600  # 10 minutes
+  retry_on_failure: 1
+  failure_notification:
+    channel: "#alerts"
+    message: "PR review workflow failed for ${{ inputs.pr_url }}"

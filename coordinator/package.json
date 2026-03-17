@@ -1,0 +1,30 @@
+{
+  "name": "@nimbleco/coordinator",
+  "version": "0.1.0",
+  "description": "Central orchestration service for NimbleCo",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@nimbleco/llm-adapters": "*",
+    "@nimbleco/tools": "*",
+    "dotenv": "^16.4.0",
+    "nats": "^2.19.0",
+    "pg": "^8.20.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.18.0",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.7.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

@@ -1,0 +1,77 @@
+# Dependencies
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Secrets
+*.pem
+*.key
+*-key.json
+service-account*.json
+
+# Docker
+docker-compose.override.yml
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Workspace (agent sandboxes)
+workspace/
+!workspace/.gitkeep
+
+# Matrix Synapse runtime storage (contains secrets and state)
+storage/synapse/
+.setup-last-session
+
+# Matrix bot state (runtime session data)
+storage/matrix-state.json
+storage/matrix-crypto/
+storage/memory.md
+storage/identity.md
+
+# Private notes and reports (not for public repo)
+PII-SCAN-REPORT.md
+FIXES-*.md
+TODO.md
+RENAME-INSTRUCTIONS.md
+READY-FOR-TESTING.md
+MATRIX-MIGRATION-COMPLETE.md
+.env.backup
+
+# Claude Code local settings
+.claude/
+.env.*

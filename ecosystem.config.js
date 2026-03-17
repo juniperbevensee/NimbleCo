@@ -1,0 +1,126 @@
+// pm2 ecosystem config - Start all services at once
+//
+// Quick start:
+//   npm install -g pm2
+//   pm2 start ecosystem.config.js
+//
+// Useful commands:
+//   pm2 list              - View all processes
+//   pm2 logs              - View all logs (live tail)
+//   pm2 logs coordinator  - View specific service
+//   pm2 monit             - Interactive monitoring dashboard
+//   pm2 restart all       - Restart all services
+//   pm2 stop all          - Stop all services
+//   pm2 delete all        - Remove all processes from pm2
+//
+// Log files are stored in ./logs/
+
+module.exports = {
+  apps: [
+    // Coordinator - central orchestration
+    {
+      name: 'coordinator',
+      script: './coordinator/dist/main.js',
+      cwd: './',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      env: {
+        NODE_ENV: 'production',
+      },
+      env_development: {
+        NODE_ENV: 'development',
+      },
+      error_file: './logs/coordinator-error.log',
+      out_file: './logs/coordinator-out.log',
+      time: true,
+    },
+
+    // Universal Agent - handles dynamic swarm agents
+    {
+      name: 'agent-universal',
+      script: 'npx',
+      args: 'tsx watch src/main.ts',
+      cwd: './agents/universal',
+      instances: 3, // Multiple instances for parallel swarm processing
+      autorestart: true,
+      watch: false, // tsx watch handles its own reloading
+      max_memory_restart: '500M',
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: '../logs/agent-universal-error.log',
+      out_file: '../logs/agent-universal-out.log',
+      time: true,
+    },
+
+    // Security Agent (placeholder)
+    // Uncomment when implemented
+    // {
+    //   name: 'agent-security',
+    //   script: './agents/security/dist/main.js',
+    //   cwd: './',
+    //   instances: 1,
+    //   autorestart: true,
+    //   watch: false,
+    // },
+
+    // Test Runner Agent (placeholder)
+    // {
+    //   name: 'agent-test-runner',
+    //   script: './agents/test-runner/dist/main.js',
+    //   cwd: './',
+    //   instances: 1,
+    //   autorestart: true,
+    //   watch: false,
+    // },
+
+    // Dashboard API Server
+    {
+      name: 'dashboard-server',
+      script: './dashboard/dist/server.js',
+      cwd: './',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '256M',
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: './logs/dashboard-server-error.log',
+      out_file: './logs/dashboard-server-out.log',
+      time: true,
+    },
+
+    // Dashboard UI (Vite dev server)
+    {
+      name: 'dashboard-ui',
+      script: 'npm',
+      args: 'run dev',
+      cwd: './dashboard',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '256M',
+      env: {
+        NODE_ENV: 'development',
+      },
+      error_file: './logs/dashboard-ui-error.log',
+      out_file: './logs/dashboard-ui-out.log',
+      time: true,
+    },
+  ],
+
+  // Development mode with auto-reload
+  deploy: {
+    development: {
+      user: 'node',
+      host: 'localhost',
+      ref: 'origin/main',
+      repo: 'git@github.com:juniperbevensee/NimbleCo.git',
+      path: '/var/www/nimbleco',
+      'post-deploy': 'npm install && npm run build && pm2 reload ecosystem.config.js',
+    },
+  },
+};

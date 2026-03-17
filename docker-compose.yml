@@ -1,0 +1,204 @@
+services:
+  # ============================================================================
+  # CORE INFRASTRUCTURE
+  # ============================================================================
+
+  # NATS - High-speed message bus for agent communication
+  nats:
+    image: nats:latest
+    container_name: nimble-nats
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # HTTP monitoring
+      - "6222:6222"  # Cluster routing
+    command:
+      - "-m=8222"           # HTTP monitoring port
+      # JetStream disabled - using core NATS for ephemeral messaging
+      # This prevents message persistence and replay issues
+    networks:
+      - nimble-network
+    healthcheck:
+      test: ["CMD", "nats-server", "--help"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # PostgreSQL - Primary database
+  postgres:
+    image: postgres:15-alpine
+    container_name: nimble-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-password}
+      POSTGRES_DB: ${POSTGRES_DB:-nimbleco}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - nimble-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================================
+  # AGENT ORCHESTRATION
+  # ============================================================================
+
+  # Coordinator - Central orchestration service
+  coordinator:
+    build:
+      context: ./coordinator
+      dockerfile: Dockerfile
+    container_name: nimble-coordinator
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agent}:${POSTGRES_PASSWORD:-change-this-password}@postgres:5432/${POSTGRES_DB:-nimbleco}
+      MATTERMOST_URL: ${MATTERMOST_URL}
+      MATTERMOST_BOT_TOKEN: ${MATTERMOST_BOT_TOKEN}
+      MATTERMOST_CHANNEL: ${MATTERMOST_CHANNEL}
+      MATTERMOST_ADMIN_USERS: ${MATTERMOST_ADMIN_USERS}
+      MATTERMOST_LOG_ALL_MESSAGES: ${MATTERMOST_LOG_ALL_MESSAGES:-true}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      VERTEX_AI_PROJECT: ${VERTEX_AI_PROJECT}
+      AWS_REGION: ${AWS_REGION}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./coordinator/src:/app/src  # Hot reload in dev
+      - coordinator_data:/app/data
+      - ./storage/workspace:/workspace  # Shared workspace for file operations
+    networks:
+      - nimble-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # OPTIONAL SERVICES (comment out if not needed)
+  # ============================================================================
+
+  # MinIO - S3-compatible file storage
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: nimble-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    networks:
+      - nimble-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - full  # Only starts with: docker-compose --profile full up
+
+  # Flowise - Visual workflow builder
+  flowise:
+    image: flowiseai/flowise:latest
+    container_name: nimble-flowise
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_PATH: /root/.flowise
+      APIKEY_PATH: /root/.flowise
+      SECRETKEY_PATH: /root/.flowise
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - flowise_data:/root/.flowise
+    networks:
+      - nimble-network
+    restart: unless-stopped
+    profiles:
+      - full
+
+  # Neo4j - Knowledge graph (optional, for shared context)
+  neo4j:
+    image: neo4j:5-community
+    container_name: nimble-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-password}
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - nimble-network
+    restart: unless-stopped
+    profiles:
+      - full
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nimble-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - nimble-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nimble-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - nimble-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+networks:
+  nimble-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  coordinator_data:
+  minio_data:
+  flowise_data:
+  neo4j_data:
+  neo4j_logs:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,22 @@
+{
+  "name": "@nimbleco/llm-adapters",
+  "version": "0.1.0",
+  "description": "Multi-provider LLM adapters (Ollama, Claude, Vertex, Bedrock)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@google-cloud/vertexai": "^1.0.0",
+    "@google/generative-ai": "^0.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
