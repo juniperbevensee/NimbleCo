@@ -9,10 +9,9 @@ dist/
 build/
 *.tsbuildinfo
 
-# Environment
-.env
-.env.local
-.env.*.local
+# Environment (exclude all except .env.example)
+.env*
+!.env.example
 
 # IDE
 .vscode/
@@ -53,25 +52,9 @@ temp/
 workspace/
 !workspace/.gitkeep
 
-# Matrix Synapse runtime storage (contains secrets and state)
-storage/synapse/
-.setup-last-session
-
-# Matrix bot state (runtime session data)
-storage/matrix-state.json
-storage/matrix-crypto/
-storage/memory.md
-storage/identity.md
-
-# Private notes and reports (not for public repo)
-PII-SCAN-REPORT.md
-FIXES-*.md
-TODO.md
-RENAME-INSTRUCTIONS.md
-READY-FOR-TESTING.md
-MATRIX-MIGRATION-COMPLETE.md
-.env.backup
+# Runtime storage
+storage/
+!storage/.gitkeep
 
 # Claude Code local settings
 .claude/
-.env.*
