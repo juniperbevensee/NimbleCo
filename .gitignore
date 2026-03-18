@@ -12,6 +12,7 @@ build/
 # Environment (exclude all except .env.example)
 .env*
 !.env.example
+.setup-last-session
 
 # IDE
 .vscode/
