@@ -27,6 +27,7 @@ const listReposTool: Tool = {
     'List all repositories',
   ],
   category: 'code',
+  requiredEnv: ['GITHUB_TOKEN'],
   parameters: {
     type: 'object',
     properties: {
@@ -84,6 +85,7 @@ const getRepoTool: Tool = {
     'Get info about owner/repo',
   ],
   category: 'code',
+  requiredEnv: ['GITHUB_TOKEN'],
   parameters: {
     type: 'object',
     properties: {
@@ -135,6 +137,7 @@ const listPRsTool: Tool = {
     'List pull requests',
   ],
   category: 'code',
+  requiredEnv: ['GITHUB_TOKEN'],
   parameters: {
     type: 'object',
     properties: {
@@ -188,6 +191,7 @@ const searchCodeTool: Tool = {
     'Find code containing Y',
   ],
   category: 'code',
+  requiredEnv: ['GITHUB_TOKEN'],
   parameters: {
     type: 'object',
     properties: {

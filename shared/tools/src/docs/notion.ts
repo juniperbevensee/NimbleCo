@@ -96,6 +96,7 @@ export const createNotionPage: Tool = {
   name: 'create_notion_page',
   description: 'Create a new page in Notion with markdown content. Can create in a database or as a child of another page.',
   category: 'docs',
+  requiredEnv: ['NOTION_API_KEY'],
   use_cases: [
     'creating documentation',
     'logging meeting notes',
@@ -169,6 +170,7 @@ export const appendNotionPage: Tool = {
   name: 'append_to_notion_page',
   description: 'Add content to an existing Notion page (appends to the end)',
   category: 'docs',
+  requiredEnv: ['NOTION_API_KEY'],
   use_cases: [
     'adding to existing doc',
     'appending notes',
@@ -212,6 +214,7 @@ export const searchNotion: Tool = {
   name: 'search_notion',
   description: 'Search across all Notion pages and databases you have access to',
   category: 'docs',
+  requiredEnv: ['NOTION_API_KEY'],
   use_cases: [
     'finding existing docs in Notion workspace',
     'searching Notion pages by title or content',
@@ -271,6 +274,7 @@ export const readNotionPage: Tool = {
   name: 'read_notion_page',
   description: 'Read content from a Notion page (returns blocks as structured data)',
   category: 'docs',
+  requiredEnv: ['NOTION_API_KEY'],
   use_cases: [
     'reading existing documentation',
     'fetching page content',
@@ -330,6 +334,7 @@ export const createNotionDatabase: Tool = {
   name: 'create_notion_database',
   description: 'Create a new database in Notion (like a table or task list)',
   category: 'docs',
+  requiredEnv: ['NOTION_API_KEY'],
   use_cases: [
     'creating project tracker',
     'setting up task database',

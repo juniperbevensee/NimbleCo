@@ -29,6 +29,10 @@ export interface Tool {
   // Direct handler - no abstraction
   handler: (input: any, context: ToolContext) => Promise<any>;
 
+  // Required environment variables - tool won't be offered if these aren't set
+  // e.g., ['ATTIO_API_KEY'] or ['GITHUB_TOKEN']
+  requiredEnv?: string[];
+
   // Permission controls (inspired by cantrip-integrations-signal)
   // Sensitive tools (logs, analytics, monitoring) require admin OR context room
   permissions?: {
@@ -36,6 +40,26 @@ export interface Tool {
     requiresContextRoom?: boolean; // Non-admins can only use for their current room
     sensitiveReason?: string; // Why this tool is sensitive (for error messages)
   };
+}
+
+/**
+ * Check if a tool has its required environment variables set
+ */
+export function isToolConfigured(tool: Tool): boolean {
+  if (!tool.requiredEnv || tool.requiredEnv.length === 0) {
+    return true; // No requirements
+  }
+  return tool.requiredEnv.every(envVar => {
+    const value = process.env[envVar];
+    return value && value.trim().length > 0;
+  });
+}
+
+/**
+ * Filter tools to only include those with required env vars configured
+ */
+export function filterConfiguredTools<T extends Tool>(tools: T[]): T[] {
+  return tools.filter(isToolConfigured);
 }
 
 // Tool selection strategy - this is the KEY problem

@@ -78,6 +78,7 @@ export const updateAttioPerson: Tool = {
   name: 'update_attio_person',
   description: 'Update a person\'s profile in Attio CRM. Use this when you need to record information about a contact (job title, company, notes, etc).',
   category: 'crm',
+  requiredEnv: ['ATTIO_API_KEY'],
   use_cases: [
     'recording contact information',
     'updating person details',
@@ -132,6 +133,7 @@ export const addAttioNote: Tool = {
   name: 'add_attio_note',
   description: 'Add a note to a person\'s profile in Attio. Use this to log conversations, meetings, or important context.',
   category: 'crm',
+  requiredEnv: ['ATTIO_API_KEY'],
   use_cases: [
     'logging conversation',
     'recording meeting notes',
@@ -180,6 +182,7 @@ export const linkAttioPersonCompany: Tool = {
   name: 'link_attio_person_company',
   description: 'Link a person to a company in Attio (creates "works at" relationship)',
   category: 'crm',
+  requiredEnv: ['ATTIO_API_KEY'],
   use_cases: [
     'associating contact with company',
     'recording employment',

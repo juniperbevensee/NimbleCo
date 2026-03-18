@@ -1,7 +1,7 @@
 // Central tool registry and selection system
 // Solves the REAL problems: tool selection at scale + prompt caching
 
-import { Tool, ToolRegistry, TieredToolLoader, ToolContext } from './base';
+import { Tool, ToolRegistry, TieredToolLoader, ToolContext, filterConfiguredTools } from './base';
 import { checkToolPermission, extractTargetRoom, ToolPermissionContext } from './permissions';
 import { filterToolsByAccessTier, getLlmModelForUser, isProviderAllowed, getAccessTierConfig } from './access-tiers';
 import { attioTools } from './crm/attio';
@@ -172,13 +172,21 @@ export class CachedPromptBuilder {
     // Get task-specific tools
     const taskTools = this.selector.selectByTask(taskDescription);
 
+    // SPECIAL CASE: Add research tools for social media analysis tasks
+    const lowercaseTask = taskDescription.toLowerCase();
+    const researchKeywords = ['openmeasures', 'social media', 'telegram', 'twitter', 'reddit', 'actors', 'influencer', 'trending'];
+    const researchTools = researchKeywords.some(kw => lowercaseTask.includes(kw))
+      ? this.registry.getByCategory('research')
+      : [];
+
     // Combine and deduplicate
-    const allTools = [...coreTools];
-    const coreNames = new Set(coreTools.map(t => t.name));
+    const allTools = [...coreTools, ...researchTools];
+    const addedNames = new Set(allTools.map(t => t.name)); // Track ALL already-added tools, not just core
 
     taskTools.forEach(tool => {
-      if (!coreNames.has(tool.name)) {
+      if (!addedNames.has(tool.name)) {
         allTools.push(tool);
+        addedNames.add(tool.name); // Update the set
       }
     });
 
@@ -291,20 +299,24 @@ export const toolSelector = new SmartToolSelector(registry);
 export const promptBuilder = new CachedPromptBuilder(toolSelector, registry);
 
 // Get tools for a specific task (main API)
+// Filters out tools that don't have their required env vars configured
 export function getToolsForTask(taskDescription: string): Tool[] {
-  return promptBuilder.buildTaskTools(taskDescription);
+  const tools = promptBuilder.buildTaskTools(taskDescription);
+  return filterConfiguredTools(tools);
 }
 
 /**
- * Get tools for a task, filtered by user access tier
- * Non-admin users won't see admin-only tools
+ * Get tools for a task, filtered by:
+ * 1. Required env vars (tools without their API keys won't appear)
+ * 2. User access tier (admin-only tools filtered for non-admins)
  */
 export function getToolsForTaskWithAccessTier(
   taskDescription: string,
   isAdmin: boolean
 ): Tool[] {
   const allTools = promptBuilder.buildTaskTools(taskDescription);
-  return filterToolsByAccessTier(allTools, isAdmin);
+  const configuredTools = filterConfiguredTools(allTools);
+  return filterToolsByAccessTier(configuredTools, isAdmin);
 }
 
 /**
