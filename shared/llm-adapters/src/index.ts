@@ -173,7 +173,8 @@ export class AnthropicAdapter extends LLMAdapter {
     const nonSystemMessages = messages.filter(m => m.role !== 'system');
 
     // Retry logic for rate limits
-    const maxRetries = 5;
+    // 1 retry (2 attempts total) before falling back
+    const maxRetries = 2;
     let lastError: any;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -224,7 +225,7 @@ export class AnthropicAdapter extends LLMAdapter {
         const jitter = Math.random() * 1000;
         const delay = baseDelay + jitter;
 
-        console.log(`⏳ Rate limited (429). Waiting ${Math.round(delay / 1000)}s before retry ${attempt + 1}/${maxRetries - 1}...`);
+        console.log(`⏳ Rate limited (429). Waiting ${Math.round(delay / 1000)}s before retry ${attempt + 1}/1...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -487,8 +488,8 @@ export class BedrockAdapter extends LLMAdapter {
     console.log(`   Bearer token: ${this.bearerToken.substring(0, 20)}...`);
 
     // Retry logic for rate limits and transient errors
-    // 2 retries (3 attempts total) with backoff: ~15s, ~45s before falling back
-    const maxRetries = 3;
+    // 1 retry (2 attempts total) with backoff: ~15s before falling back
+    const maxRetries = 2;
     let lastError: any;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -521,12 +522,12 @@ export class BedrockAdapter extends LLMAdapter {
 
           if (isRetryable && attempt < maxRetries - 1) {
             // Calculate exponential backoff with longer delays
-            // First retry: 5s, Second retry: 15s, Third retry: 45s
+            // First retry: ~15s
             const baseDelay = Math.pow(3, attempt + 1) * 5000;
             const jitter = Math.random() * 2000;
             const delay = baseDelay + jitter;
 
-            console.log(`⏳ ${response.status === 429 ? 'Rate limited' : 'Server error'} (${response.status}). Waiting ${Math.round(delay / 1000)}s before retry ${attempt + 1}/${maxRetries - 1}...`);
+            console.log(`⏳ ${response.status === 429 ? 'Rate limited' : 'Server error'} (${response.status}). Waiting ${Math.round(delay / 1000)}s before retry ${attempt + 1}/1...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -587,12 +588,12 @@ export class BedrockAdapter extends LLMAdapter {
         }
 
         // Otherwise, retry with backoff
-        // First retry: 5s, Second retry: 15s
+        // First retry: ~15s
         const baseDelay = Math.pow(3, attempt + 1) * 5000;
         const jitter = Math.random() * 2000;
         const delay = baseDelay + jitter;
 
-        console.log(`⚠️ Request failed (${error.message}). Waiting ${Math.round(delay / 1000)}s before retry ${attempt + 1}/${maxRetries - 1}...`);
+        console.log(`⚠️ Request failed (${error.message}). Waiting ${Math.round(delay / 1000)}s before retry ${attempt + 1}/1...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -678,10 +679,18 @@ export class LLMRouter {
   private adapters: Map<string, LLMAdapter> = new Map();
   private dailyCost = 0;
   private dailyLimit: number;
+  private failedAdapters: Set<string> = new Set(); // Track failed adapters for this invocation
 
   constructor(dailyLimit = 10) {
     this.dailyLimit = dailyLimit;
     this.resetDailyCostAtMidnight();
+  }
+
+  /**
+   * Reset failed adapters cache (call at start of new invocation)
+   */
+  resetFailedAdapters() {
+    this.failedAdapters.clear();
   }
 
   register(name: string, adapter: LLMAdapter) {
@@ -726,6 +735,10 @@ export class LLMRouter {
         console.log(`❌ ${name} failed: ${error.message}`);
         lastError = error;
 
+        // Mark this adapter as failed for the rest of this invocation
+        this.failedAdapters.add(name);
+        console.log(`   ⚠️  ${name} marked as failed for this invocation`);
+
         // If we have more adapters to try, continue to next one
         if (i < adaptersToTry.length - 1) {
           console.log(`   Trying next adapter...`);
@@ -741,29 +754,28 @@ export class LLMRouter {
   private getAdapterPriorityList(taskType: string): Array<{ name: string; adapter: LLMAdapter }> {
     const priorityList: Array<{ name: string; adapter: LLMAdapter }> = [];
 
+    // Helper to add adapter if available and not failed
+    const tryAddAdapter = (name: string) => {
+      if (this.adapters.has(name) && !this.failedAdapters.has(name)) {
+        priorityList.push({ name, adapter: this.adapters.get(name)! });
+      }
+    };
+
     // For ALL tasks, try cloud providers first (they're faster and more reliable)
     // Priority: Bedrock > Vertex > Google AI > Anthropic
     if (this.dailyCost < this.dailyLimit) {
-      if (this.adapters.has('bedrock')) {
-        priorityList.push({ name: 'bedrock', adapter: this.adapters.get('bedrock')! });
-      }
-      if (this.adapters.has('vertex')) {
-        priorityList.push({ name: 'vertex', adapter: this.adapters.get('vertex')! });
-      }
-      if (this.adapters.has('google-ai')) {
-        priorityList.push({ name: 'google-ai', adapter: this.adapters.get('google-ai')! });
-      }
-      if (this.adapters.has('anthropic')) {
-        priorityList.push({ name: 'anthropic', adapter: this.adapters.get('anthropic')! });
-      }
+      tryAddAdapter('bedrock');
+      tryAddAdapter('vertex');
+      tryAddAdapter('google-ai');
+      tryAddAdapter('anthropic');
     }
 
     // Add local Ollama models as final fallback
-    if (this.adapters.has('ollama-code') && !priorityList.some(p => p.name === 'ollama-code')) {
-      priorityList.push({ name: 'ollama-code', adapter: this.adapters.get('ollama-code')! });
+    if (!priorityList.some(p => p.name === 'ollama-code')) {
+      tryAddAdapter('ollama-code');
     }
-    if (this.adapters.has('ollama-quick') && !priorityList.some(p => p.name === 'ollama-quick')) {
-      priorityList.push({ name: 'ollama-quick', adapter: this.adapters.get('ollama-quick')! });
+    if (!priorityList.some(p => p.name === 'ollama-quick')) {
+      tryAddAdapter('ollama-quick');
     }
 
     // If still nothing, add all available adapters

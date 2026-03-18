@@ -358,6 +358,10 @@ class Coordinator {
       taskType: task.type,
     });
 
+    // Reset failed adapters cache for this new invocation
+    this.llmRouter.resetFailedAdapters();
+    console.log(`📊 Started invocation ${invocationId}`);
+
     // Get relevant tools for this task
     const tools = getToolsForTask(description);
     console.log(`🔧 Available tools: ${tools.map(t => t.name).join(', ')}`);
