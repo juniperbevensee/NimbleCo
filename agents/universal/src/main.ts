@@ -103,6 +103,16 @@ export class UniversalAgent {
       this.llmRouter.register('anthropic', claude);
     }
 
+    // Google AI (Gemini API with API key)
+    if (process.env.GOOGLE_CLOUD_API_KEY && process.env.GOOGLE_MODEL) {
+      console.log(`🔧 Google AI: ${process.env.GOOGLE_MODEL}`);
+      const googleAI = createLLM('google-ai', process.env.GOOGLE_MODEL, {
+        apiKey: process.env.GOOGLE_CLOUD_API_KEY,
+        max_tokens: parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || '30000'),
+      });
+      this.llmRouter.register('google-ai', googleAI);
+    }
+
     // Google Vertex AI (free $300 credits)
     if (process.env.VERTEX_AI_PROJECT) {
       console.log(`🔧 Vertex AI: gemini-pro (project: ${process.env.VERTEX_AI_PROJECT})`);

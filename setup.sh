@@ -635,6 +635,14 @@ if confirm "Use Anthropic Claude? (Paid, best quality)" "n"; then
     ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}
 fi
 
+# Google AI (Gemini API with API key)
+if confirm "Use Google AI / Gemini? (Free tier available)" "n"; then
+    prompt GOOGLE_CLOUD_API_KEY "Google AI API key" "" "true"
+    GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-2.5-flash-lite}
+    GOOGLE_MAX_OUTPUT_TOKENS=${GOOGLE_MAX_OUTPUT_TOKENS:-30000}
+    echo -e "${BLUE}ℹ${NC}  Get API key at: https://aistudio.google.com/apikey"
+fi
+
 # Google Vertex AI
 if confirm "Use Google Vertex AI? (\$300 free credits)" "n"; then
     prompt VERTEX_AI_PROJECT "GCP Project ID" ""
@@ -937,7 +945,17 @@ echo -e "${BLUE}  Writing Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Write .env file
+# Write .env file (preserving custom vars)
+# First, extract any custom vars from existing .env that aren't in our template
+CUSTOM_VARS=""
+if [ -f .env ]; then
+    # Known vars that setup manages
+    KNOWN_VARS="NATS_URL|DATABASE_URL|OLLAMA_URL|LLM_MODEL_QUICK|LLM_MODEL_CODE|LLM_DAILY_COST_LIMIT|ANTHROPIC_API_KEY|ANTHROPIC_MODEL|GOOGLE_CLOUD_API_KEY|GOOGLE_MODEL|GOOGLE_MAX_OUTPUT_TOKENS|VERTEX_AI_PROJECT|VERTEX_AI_LOCATION|AWS_REGION|BEDROCK_MODEL_ID|AWS_BEARER_TOKEN_BEDROCK|MATTERMOST_URL|MATTERMOST_BOT_TOKEN|MATTERMOST_CHANNEL|MATTERMOST_ADMIN_USERS|MATTERMOST_LOG_ALL_MESSAGES|GITHUB_TOKEN|ATTIO_API_KEY|NOTION_API_KEY|STORAGE_PATH|CALENDAR_STORAGE_PATH|MINIO_ENDPOINT|MINIO_BUCKET|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|RATE_LIMIT_MAX_REQUESTS|RATE_LIMIT_WINDOW_MS|AGENT_MAX_RETRIES|AGENT_TIMEOUT_MS|DASHBOARD_ENABLED"
+
+    # Extract lines that aren't comments, empty, or known vars
+    CUSTOM_VARS=$(grep -v "^#" .env | grep -v "^$" | grep -Ev "^($KNOWN_VARS)=" || true)
+fi
+
 cat > .env << EOF
 # NimbleCo Configuration
 # Generated: $(date)
@@ -954,6 +972,10 @@ LLM_DAILY_COST_LIMIT=${LLM_DAILY_COST_LIMIT}
 
 ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
+
+GOOGLE_CLOUD_API_KEY=${GOOGLE_CLOUD_API_KEY}
+GOOGLE_MODEL=${GOOGLE_MODEL}
+GOOGLE_MAX_OUTPUT_TOKENS=${GOOGLE_MAX_OUTPUT_TOKENS}
 
 VERTEX_AI_PROJECT=${VERTEX_AI_PROJECT}
 VERTEX_AI_LOCATION=${VERTEX_AI_LOCATION}
@@ -995,6 +1017,14 @@ AGENT_TIMEOUT_MS=300000
 # Dashboard
 DASHBOARD_ENABLED=${LAUNCH_DASHBOARD}
 EOF
+
+# Append custom vars if any were found
+if [ -n "$CUSTOM_VARS" ]; then
+    echo "" >> .env
+    echo "# Custom Variables (preserved from previous .env)" >> .env
+    echo "$CUSTOM_VARS" >> .env
+    echo -e "${GREEN}✓${NC} Preserved custom environment variables"
+fi
 
 echo -e "${GREEN}✓${NC} Configuration written to .env"
 
