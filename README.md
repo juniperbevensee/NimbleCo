@@ -2,7 +2,7 @@
 
 **A self-hosted, hackable agent orchestration platform for teams.**
 
-Mattermost + GitHub/Radicle + intelligent agents working together. Built for **speed, simplicity, and local-first autonomy**.
+Mattermost + intelligent modular tool rich agents working together. Built for **speed, simplicity, and local-first autonomy**.
 
 ## Vision
 
