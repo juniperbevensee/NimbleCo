@@ -19,13 +19,28 @@ echo "🔄 Restarting NimbleCo..."
 
 # Kill existing processes (coordinator and universal agent)
 echo "🧹 Stopping current processes..."
+
 # Kill PM2 managed processes if any
 pm2 delete all 2>/dev/null || true
-# Kill tsx dev processes
-pkill -f "tsx.*coordinator.*src/main" 2>/dev/null || true
-pkill -f "tsx.*universal.*src/main" 2>/dev/null || true
-pkill -f "node.*dist/main.*NimbleCo" 2>/dev/null || true
-sleep 1
+
+# Kill ALL Node processes running from this project directory (aggressive cleanup)
+# This catches processes started from any terminal
+PROJECT_DIR_PATTERN="$(pwd)"
+ps aux | grep node | grep "$PROJECT_DIR_PATTERN" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+
+# Also kill by common process patterns (belt and suspenders)
+pkill -9 -f "tsx.*coordinator.*src/main" 2>/dev/null || true
+pkill -9 -f "tsx.*universal.*src/main" 2>/dev/null || true
+pkill -9 -f "node.*NimbleCo.*coordinator" 2>/dev/null || true
+pkill -9 -f "node.*NimbleCo.*universal" 2>/dev/null || true
+pkill -9 -f "vite.*NimbleCo" 2>/dev/null || true
+
+echo "   ✅ All processes killed"
+sleep 2
+
+# Clear database post claims (prevent stale "already claimed" errors)
+echo "🧹 Clearing stale post claims..."
+docker exec nimble-postgres psql -U agent -d nimbleco -c "DELETE FROM processed_posts;" > /dev/null 2>&1 || echo "   ⚠️  Could not clear post claims (DB might not be ready)"
 
 # Rebuild
 echo "🔨 Rebuilding..."

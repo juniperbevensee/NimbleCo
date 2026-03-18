@@ -280,8 +280,13 @@ export class MattermostListener {
     // Send "typing" indicator
     await this.sendTypingIndicator(post.channel_id);
 
-    // Process the request
-    await this.processRequest(post);
+    // Process the request in parallel (don't await - allows multiple requests to process simultaneously)
+    // Each request gets its own async context and won't block other requests
+    this.processRequest(post).catch((error) => {
+      console.error(`❌ Error processing post ${post.id}:`, error);
+      // Try to notify user of error
+      this.replyToPost(post.channel_id, post.id, `❌ An error occurred: ${error.message}`).catch(() => {});
+    });
   }
 
   /**
@@ -306,9 +311,9 @@ export class MattermostListener {
       const claimed = result.rowCount !== null && result.rowCount > 0;
 
       if (claimed) {
-        console.log(`🔐 Claimed post ${postId.substring(0, 8)} (coordinator: ${this.coordinatorId.substring(0, 12)})`);
+        console.log(`🔐 Claimed post ${postId.substring(0, 8)} for processing`);
       } else {
-        console.log(`⏭️  Post ${postId.substring(0, 8)} already claimed by another coordinator`);
+        console.log(`⏭️  Post ${postId.substring(0, 8)} already claimed (duplicate event or multiple coordinators)`);
       }
 
       return claimed;
@@ -341,7 +346,7 @@ export class MattermostListener {
       // Try to claim the post in the database
       const claimed = await this.tryClaimPost(post.id);
       if (!claimed) {
-        console.log(`⏭️  Skipping post ${post.id} - another coordinator is handling it`);
+        console.log(`⏭️  Skipping duplicate post ${post.id.substring(0, 8)} (already processing or processed)`);
         return;
       }
 
