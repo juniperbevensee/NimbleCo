@@ -114,11 +114,17 @@ class Coordinator {
     }
 
     // Google AI (Gemini API with API key)
+    // Can use custom baseUrl for Vertex AI endpoint: https://aiplatform.googleapis.com/v1
     if (process.env.GOOGLE_CLOUD_API_KEY && process.env.GOOGLE_MODEL) {
+      const baseUrl = process.env.GOOGLE_API_BASE_URL || undefined;
       console.log(`🔧 Configuring Google AI: ${process.env.GOOGLE_MODEL}`);
+      if (baseUrl) {
+        console.log(`   Using custom base URL: ${baseUrl}`);
+      }
       const googleAI = createLLM('google-ai', process.env.GOOGLE_MODEL, {
         apiKey: process.env.GOOGLE_CLOUD_API_KEY,
         max_tokens: parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || '30000'),
+        baseUrl,
       });
       this.llmRouter.register('google-ai', googleAI);
       console.log('   ✅ Google AI registered');
@@ -408,14 +414,28 @@ ${threadContextStr}${lastExchangeStr}
 When the user says "this message" or "react to this", they mean post ID: ${task.payload.mattermost_thread}
 ` : '';
 
-    const systemPrompt = `${identityDocument}
+    // Split system prompt into cacheable (static) and non-cacheable (dynamic) parts
+    // This enables Anthropic prompt caching for 90% cost savings on repeated requests
+    const cacheableSystemPrompt = `${identityDocument}
 
 ---
 
 ## Current Task
 
 You are handling a user request with tool-calling abilities.
-${mattermostContext}
+
+⚠️ CHART/VISUALIZATION RULE (HIGHEST PRIORITY):
+When asked about charts or visualizations:
+1. Create chart using chart_bar/chart_line/etc (returns filename)
+2. Read the PNG file: read_workspace_file({file_path: filename, format: "base64"})
+3. IMMEDIATELY attach: post_mattermost_message_with_attachment with the base64 content and encoding='base64'
+4. NEVER just say "I created it" or describe the data - ATTACH THE ACTUAL PNG FILE!
+
+Example workflow:
+- chart_bar returns {filename: "hormuz_channels.png", ...}
+- read_workspace_file({file_path: "hormuz_channels.png", format: "base64"}) returns {content: "iVBORw0KG..."}
+- post_mattermost_message_with_attachment({filename: "hormuz_channels.png", content: "<base64>", encoding: "base64", channel_id: "...", message: "Chart attached"})
+
 WORKFLOW:
 1. Analyze the user's request
 2. Use tools as needed to gather information or perform actions
@@ -429,12 +449,38 @@ IMPORTANT:
 - Use tools multiple times if needed to complete the task
 - Provide clear, comprehensive answers
 - You have access to your persistent memory via read_agent_memory and append_agent_memory tools
+- You have access to your workspace files via list_workspace and read_workspace_file tools
+- When asked to check your workspace or find files, use list_workspace first to see what's available, then read_workspace_file to read specific files
+- ⚠️ CRITICAL: read_workspace_file is LIMITED to 50 items max for large files. DO NOT use it for data processing!
+- ⚠️ FOR DATA TRANSFORMATIONS (counting, filtering, aggregating): Use execute_javascript with fs.readFileSync() to process large files locally without sending massive files to the LLM
+- ⚠️ CRITICAL: In execute_javascript sandbox:
+  * fs is globally available - DO NOT use require('fs'), just use fs.readFileSync() directly
+  * Use console.log(JSON.stringify(result)) for output - return values may fail to transfer
+  Example: const data = JSON.parse(fs.readFileSync('/path/to/file.json', 'utf-8')); const counts = {}; data.results.forEach(item => counts[item.user] = (counts[item.user] || 0) + 1); console.log(JSON.stringify({labels: Object.keys(counts), data: Object.values(counts)}));
+- You have comprehensive data science tools for NLP and statistical analysis:
+  * Statistics: calculate_statistics, stats_advanced_summary, stats_correlation, stats_regression, stats_moving_average
+  * Sentiment & Topics: analyze_sentiment, extract_topics, text_tfidf, text_similarity, analyze_file_sentiment_topics
+  * Charts (save as PNG): chart_line, chart_bar, chart_scatter, chart_pie
+  * File Conversion: convert_csv_json, read_excel, write_excel, convert_yaml_json, convert_json_yaml, parse_csv, generate_csv
+- When asked to perform NLP analysis or statistics, use the built-in data science tools`;
+
+    const dynamicContext = `${mattermostContext}
 
 User's request: ${description}`;
 
     const messages: LLMMessage[] = [{
       role: 'system',
-      content: systemPrompt
+      content: [
+        {
+          type: 'text' as const,
+          text: cacheableSystemPrompt,
+          cache_control: { type: 'ephemeral' as const }
+        },
+        {
+          type: 'text' as const,
+          text: dynamicContext
+        }
+      ]
     }, {
       role: 'user',
       content: description
@@ -442,8 +488,11 @@ User's request: ${description}`;
 
     // Agentic loop: LLM decides which tools to use
     let iterations = 0;
-    const maxIterations = 5;
+    const maxIterations = 10; // Increased from 5 to allow for: explore → process → create → attach workflows
     let result: any = null;
+    let chartToolCalled = false;
+    let attachmentMade = false;
+    let attachmentRetries = 0; // Track how many times we've prompted to attach
 
     // Get chat platform info for progress updates
     const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
@@ -487,6 +536,18 @@ User's request: ${description}`;
 
         console.log(`  Model: ${response.provider}/${response.model}`);
         console.log(`  LLM response: ${response.content.substring(0, 200)}...`);
+
+        // Log cache statistics if present (Anthropic prompt caching)
+        if (response.usage?.cache_read_input_tokens || response.usage?.cache_creation_input_tokens) {
+          const cacheRead = response.usage.cache_read_input_tokens || 0;
+          const cacheWrite = response.usage.cache_creation_input_tokens || 0;
+          if (cacheRead > 0) {
+            console.log(`  📦 Cache HIT: ${cacheRead.toLocaleString()} tokens read from cache (90% savings!)`);
+          }
+          if (cacheWrite > 0) {
+            console.log(`  💾 Cache WRITE: ${cacheWrite.toLocaleString()} tokens written to cache`);
+          }
+        }
 
         // Log LLM call
         if (invocationId) {
@@ -559,6 +620,14 @@ User's request: ${description}`;
       if (toolCall && toolCall.tool) {
         console.log(`  🔧 Calling tool: ${toolCall.tool}`);
         console.log(`     Input:`, JSON.stringify(toolCall.input));
+
+        // Track chart tool calls and attachments
+        if (['chart_bar', 'chart_line', 'chart_scatter', 'chart_pie'].includes(toolCall.tool)) {
+          chartToolCalled = true;
+        }
+        if (toolCall.tool === 'post_mattermost_message_with_attachment') {
+          attachmentMade = true;
+        }
 
         // Send progress update for tool execution
         if (roomId) {
@@ -634,6 +703,8 @@ User's request: ${description}`;
 
       // No more tool calls, this is the final answer
       result = response.content;
+
+      // No retry loop needed - we'll auto-attach at the end
       break;
       }
 
@@ -644,6 +715,69 @@ User's request: ${description}`;
 
       // Post result to chat platform
       if (roomId) {
+        // Check if we need to attach a chart with the final result
+        if (chartToolCalled && !attachmentMade) {
+          const fs = await import('fs');
+          const path = await import('path');
+          const workspacePath = process.env.WORKSPACE_PATH || path.resolve(process.cwd(), 'storage/workspace');
+
+          try {
+            const files = fs.readdirSync(workspacePath);
+            const pngFiles = files.filter(f => f.endsWith('.png')).sort((a, b) => {
+              const aStat = fs.statSync(path.join(workspacePath, a));
+              const bStat = fs.statSync(path.join(workspacePath, b));
+              return bStat.mtimeMs - aStat.mtimeMs;
+            });
+
+            if (pngFiles.length > 0) {
+              const chartFile = pngFiles[0];
+              const chartPath = path.join(workspacePath, chartFile);
+              const chartContent = fs.readFileSync(chartPath, 'base64');
+
+              console.log(`📊 Attaching chart ${chartFile} with final result`);
+
+              // Post final result WITH chart attachment
+              const attachContext: ToolContext = {
+                platform: 'mattermost',
+                user_id: task.payload?.mattermost_user || 'system',
+                credentials: {
+                  mattermost_url: process.env.MATTERMOST_URL || '',
+                  mattermost_token: process.env.MATTERMOST_BOT_TOKEN || '',
+                },
+              };
+
+              // Don't pass thread_id - post as top-level sibling like regular final results
+              const attachResult: any = await executeToolCall(
+                'post_mattermost_message_with_attachment',
+                {
+                  channel_id: roomId,
+                  message: result || 'No response from model',
+                  filename: chartFile,
+                  content: chartContent,
+                  encoding: 'base64'
+                },
+                attachContext
+              );
+
+              // Link the response post to the invocation for reaction tracking
+              if (attachResult.success && attachResult.post_id && invocationId) {
+                const reactionTracker = (this as any).reactionTracker;
+                if (reactionTracker) {
+                  await reactionTracker.linkResponseToInvocation(invocationId, attachResult.post_id);
+                  console.log(`🔗 Linked response post ${attachResult.post_id.substring(0, 8)} to invocation ${invocationId.substring(0, 8)}`);
+                }
+              }
+
+              console.log(`📬 Posted final result with chart attachment`);
+              return; // Skip regular postToChatPlatform since we already posted
+            }
+          } catch (error) {
+            console.log('⚠️  Failed to attach chart with final result:', error);
+            // Fall through to regular post
+          }
+        }
+
+        // Regular post without attachment
         await this.postToChatPlatform(
           roomId,
           eventId,

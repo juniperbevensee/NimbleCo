@@ -58,12 +58,17 @@ export async function handleLargeResult(
  */
 export const readWorkspaceFile: Tool = {
   name: 'read_workspace_file',
-  description: 'Read a file from the agent workspace. Use this to retrieve results that were saved by other tools.',
+  description: 'Read a file from the agent workspace. For images/binary files, use format="base64". ⚠️ IMPORTANT: For large JSON/text files (>100KB), this tool returns ONLY structure/sample. DO NOT try to read full files - instead use execute_javascript to process them locally. For data analysis (counting, filtering, aggregating), ALWAYS use execute_javascript with fs.readFileSync() to avoid token waste.',
   category: 'storage',
   use_cases: [
-    'Read saved search results',
-    'Access large datasets from previous tool calls',
-    'Review exported data',
+    'Read chart PNG files as base64 for attachment (format="base64")',
+    'Read image files for sharing (format="base64")',
+    'Get file structure and metadata for large datasets',
+    'Read small configuration or result files',
+    'Preview first few records of large files',
+    'Check what files exist in workspace',
+    '⚠️ DO NOT USE for data analysis - use execute_javascript instead',
+    '⚠️ DO NOT USE to read full large files - use execute_javascript with fs.readFileSync()',
   ],
   parameters: {
     type: 'object',
@@ -74,22 +79,26 @@ export const readWorkspaceFile: Tool = {
       },
       format: {
         type: 'string',
-        enum: ['text', 'json'],
-        description: 'How to parse the file contents',
+        enum: ['text', 'json', 'base64'],
+        description: 'How to parse the file contents. Use base64 for binary files (images, etc.)',
       },
       limit: {
         type: 'number',
-        description: 'For JSON arrays, limit number of items returned',
+        description: 'For JSON arrays, limit number of items returned. Max: 50 items. For larger datasets, use execute_javascript instead.',
       },
       offset: {
         type: 'number',
-        description: 'For JSON arrays, skip this many items',
+        description: 'For JSON arrays, skip this many items. For processing full datasets, use execute_javascript with fs.readFileSync().',
       },
     },
     required: ['file_path'],
   },
   async handler(input: { file_path: string; format?: string; limit?: number; offset?: number }, ctx: ToolContext) {
-    const { file_path, format = 'json', limit, offset = 0 } = input;
+    const { file_path, format = 'json', offset = 0 } = input;
+
+    // Hard cap on limit to prevent token waste
+    const MAX_LIMIT = 50;
+    const limit = input.limit ? Math.min(input.limit, MAX_LIMIT) : undefined;
 
     // Resolve path (allow both relative and absolute)
     const fullPath = path.isAbsolute(file_path)
@@ -106,12 +115,114 @@ export const readWorkspaceFile: Tool = {
     }
 
     try {
+      // For base64 format, read as buffer instead of UTF-8
+      if (format === 'base64') {
+        const buffer = await fs.readFile(resolvedPath);
+        const base64Content = buffer.toString('base64');
+        const fileSizeKB = Math.round(buffer.length / 1024);
+
+        return {
+          success: true,
+          format: 'base64',
+          size_kb: fileSizeKB,
+          content: base64Content,
+          file_path: resolvedPath,
+        };
+      }
+
       const content = await fs.readFile(resolvedPath, 'utf-8');
+      const fileSizeKB = Math.round(content.length / 1024);
 
       if (format === 'json') {
         let data = JSON.parse(content);
 
-        // Handle pagination for arrays
+        // For very large files (>100KB), only return metadata + sample unless limit specified
+        if (content.length > 100000) {
+          // Check if it's an object with nested arrays (common pattern)
+          let arrayInfo = null;
+          let sampleData = null;
+
+          if (typeof data === 'object' && !Array.isArray(data)) {
+            // Find arrays in the top-level object
+            const arrays = Object.entries(data)
+              .filter(([_, value]) => Array.isArray(value))
+              .map(([key, value]: [string, any]) => ({ key, length: value.length }));
+
+            if (arrays.length > 0) {
+              const mainArray = arrays.reduce((max, curr) =>
+                curr.length > max.length ? curr : max
+              );
+              arrayInfo = {
+                mainArrayKey: mainArray.key,
+                arrayLength: mainArray.length,
+                otherFields: Object.keys(data).filter(k => !Array.isArray(data[k])),
+              };
+
+              // Provide sample of first few items
+              if (limit) {
+                const cappedLimit = Math.min(limit, MAX_LIMIT);
+                data[mainArray.key] = data[mainArray.key].slice(offset, offset + cappedLimit);
+                sampleData = data;
+              } else {
+                // Default: return structure + first 5 items as sample
+                const originalArray = data[mainArray.key];
+                data[mainArray.key] = originalArray.slice(0, 5);
+                sampleData = data;
+              }
+            }
+          }
+
+          // For direct arrays
+          if (Array.isArray(data)) {
+            const total = data.length;
+            if (limit || !limit) {
+              // Always apply default limit for large arrays
+              const actualLimit = limit || 10;
+              data = data.slice(offset, offset + actualLimit);
+              return {
+                success: true,
+                file_path: resolvedPath,
+                large_file: true,
+                file_size_bytes: content.length,
+                file_size_kb: fileSizeKB,
+                total_records: total,
+                returned_records: data.length,
+                offset,
+                warning: `⚠️ LARGE FILE (${fileSizeKB}KB, ${total} records). Returning only ${data.length} items to avoid token waste.`,
+                recommendation: `To process this data, use execute_javascript with: const data = JSON.parse(fs.readFileSync('${resolvedPath}', 'utf-8'));`,
+                data,
+              };
+            }
+          }
+
+          // For objects with arrays
+          if (arrayInfo) {
+            const returnedCount = limit || 5;
+            return {
+              success: true,
+              file_path: resolvedPath,
+              large_file: true,
+              file_size_bytes: content.length,
+              file_size_kb: fileSizeKB,
+              structure: arrayInfo,
+              warning: `⚠️ LARGE FILE (${fileSizeKB}KB, ${arrayInfo.arrayLength} records in ${arrayInfo.mainArrayKey}). Returning only ${returnedCount} items to avoid token waste.`,
+              recommendation: `To process this data, use execute_javascript with: const data = JSON.parse(fs.readFileSync('${resolvedPath}', 'utf-8')); const items = data.${arrayInfo.mainArrayKey};`,
+              message: limit
+                ? `Returned ${returnedCount} items from ${arrayInfo.mainArrayKey} array (offset: ${offset})`
+                : `Returning sample (first 5 items from ${arrayInfo.mainArrayKey}).`,
+              data: sampleData,
+            };
+          }
+
+          // Fallback for other large JSON
+          return {
+            success: false,
+            error: `⚠️ File too large (${fileSizeKB}KB) to return. Use execute_javascript to process: const data = JSON.parse(fs.readFileSync('${resolvedPath}', 'utf-8'));`,
+            file_size_bytes: content.length,
+          };
+        }
+
+        // Handle pagination for arrays (small files)
         if (Array.isArray(data) && (limit || offset)) {
           const total = data.length;
           data = data.slice(offset, limit ? offset + limit : undefined);
@@ -121,16 +232,6 @@ export const readWorkspaceFile: Tool = {
             total_records: total,
             returned_records: data.length,
             offset,
-            data,
-          };
-        }
-
-        // Warn if result is very large
-        if (content.length > 100000) {
-          return {
-            success: true,
-            file_path: resolvedPath,
-            warning: 'Large JSON file - consider using offset/limit or processing in chunks',
             data,
           };
         }
@@ -159,6 +260,10 @@ export const listWorkspace: Tool = {
     'See what files are available',
     'Find saved results',
     'Check workspace contents',
+    'List files in workspace',
+    'Browse workspace directory',
+    'Check your workspace',
+    'See what data exists',
   ],
   parameters: {
     type: 'object',

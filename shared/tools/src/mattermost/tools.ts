@@ -133,9 +133,11 @@ export const downloadAttachment = createTool({
 
 export const postWithAttachment = createTool({
   name: 'post_mattermost_message_with_attachment',
-  description: 'Upload a file and post a message with the file attached in Mattermost. Use this to share files with users.',
+  description: '⚠️ CRITICAL: Upload and attach a file in Mattermost. ALWAYS use this immediately after creating charts/visualizations. NEVER just tell the user about a file - they cannot see it unless you attach it with this tool!',
   category: 'communication',
   use_cases: [
+    '⚠️ REQUIRED: Attach charts/visualizations immediately after creating them',
+    'Share PNG/image files with user',
     'Send file to user',
     'Post message with attachment',
     'Share document',
@@ -147,8 +149,9 @@ export const postWithAttachment = createTool({
     filename: z.string().describe('Name of the file to upload'),
     content: z.string().describe('File content (as text or base64 string)'),
     encoding: z.enum(['utf-8', 'base64']).optional().describe('Content encoding (default: utf-8)'),
+    thread_id: z.string().optional().describe('Thread ID (root_id) to reply to. If provided, the attachment will be posted as a threaded reply.'),
   }),
-  handler: async ({ channel_id, message, filename, content, encoding = 'utf-8' }, context) => {
+  handler: async ({ channel_id, message, filename, content, encoding = 'utf-8', thread_id }, context) => {
     const config = getMattermostConfig(context);
 
     try {
@@ -182,17 +185,24 @@ export const postWithAttachment = createTool({
       }
 
       // Post message with attachment
+      const postBody: any = {
+        channel_id,
+        message,
+        file_ids: [fileId],
+      };
+
+      // Add root_id if thread_id provided (for threaded replies)
+      if (thread_id) {
+        postBody.root_id = thread_id;
+      }
+
       const postResponse = await fetch(`${config.url}/api/v4/posts`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${config.token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          channel_id,
-          message,
-          file_ids: [fileId],
-        }),
+        body: JSON.stringify(postBody),
       });
 
       if (!postResponse.ok) {

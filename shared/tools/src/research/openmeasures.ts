@@ -12,8 +12,9 @@ import { initializeTokenManager, getValidAccessToken, isInitialized } from './op
 /**
  * Get or create Open Measures client with automatic token refresh
  */
-async function getClient(apiKey?: string): Promise<OpenMeasuresClient> {
-  const providedKey = apiKey || process.env.OPEN_MEASURES_API_KEY;
+async function getClient(apiKey?: string, timeout?: number): Promise<OpenMeasuresClient> {
+  // Filter out empty strings - treat them as undefined
+  const providedKey = (apiKey && apiKey.trim()) || process.env.OPEN_MEASURES_API_KEY;
   const refreshToken = process.env.OPEN_MEASURES_REFRESH_TOKEN;
 
   if (!providedKey) {
@@ -39,6 +40,7 @@ async function getClient(apiKey?: string): Promise<OpenMeasuresClient> {
 
   return new OpenMeasuresClient({
     apiKey: validToken,
+    timeout: timeout || 30000, // Default 30s, can be overridden
   });
 }
 
@@ -198,12 +200,14 @@ export const openMeasuresTools: Tool[] = [
   },
   {
     name: 'get_social_media_actors',
-    description: 'Find the most active or influential accounts/actors for a topic. Useful for identifying key voices and communities.',
+    description: 'Count and rank the most active users/actors for a topic across social media. Returns aggregated counts of who is posting most. Perfect for creating bar charts of top users, analyzing who shares content most, and identifying influential accounts. Native API aggregation - much faster than processing JSON files locally.',
     category: 'research',
     use_cases: [
+      'Create bar chart of users most sharing about a topic',
+      'Count posts per user/actor and rank them',
       'Identify influential accounts on a topic',
       'Find active participants in discussions',
-      'Analyze community structure',
+      'Analyze community structure and top contributors',
       'Discover key opinion leaders',
     ],
     parameters: {
@@ -250,6 +254,193 @@ export const openMeasuresTools: Tool[] = [
           success: true,
           actors: response.results || [],
           total: response.total_hits || 0,
+          query: term,
+        };
+      } catch (error: any) {
+        return {
+          success: false,
+          error: error.message || String(error),
+        };
+      }
+    },
+  },
+  {
+    name: 'get_user_activity_for_topic',
+    description: '⚠️ USE THIS for "users posting most about X" queries! Aggregates which users posted the MOST about a search term. Returns counts of posts per user. Perfect for bar charts showing top posters/sharers for a topic. This is NOT searching for usernames - it searches post content and counts by user.',
+    category: 'research',
+    use_cases: [
+      'Create bar chart of users posting most about a topic',
+      'Count which users share content most about a term',
+      'Find most active posters discussing a keyword',
+      'Rank users by activity on a topic',
+      'Aggregate user activity for a search query',
+    ],
+    parameters: {
+      type: 'object',
+      properties: {
+        term: {
+          type: 'string',
+          description: 'Search term to find in post content (e.g., "openclaw")',
+        },
+        site: {
+          type: 'string',
+          description: 'Platform: telegram, twitter, reddit, etc.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of users to return (default: 50, max: 50 for performance)',
+        },
+        from: {
+          type: 'string',
+          description: 'Start date (ISO 8601)',
+        },
+        to: {
+          type: 'string',
+          description: 'End date (ISO 8601)',
+        },
+      },
+      required: ['term'],
+    },
+    handler: async (input: any, context: any) => {
+      const { term, site, limit, from, to } = input;
+
+      if (!term) {
+        return {
+          success: false,
+          error: 'Search term is required',
+        };
+      }
+
+      try {
+        // Use longer timeout (120s) for aggregation queries
+        const client = await getClient(context.credentials?.open_measures_api_key, 120000);
+
+        console.log(`🔍 OpenMeasures activity query: term="${term}", site="${site || 'all'}", agg_size=${limit || 50}`);
+        console.log(`   Client tier: ${client.tier}`);
+
+        const params: any = {
+          term,
+          standard_fields: true,
+          agg_by: 'actor.username', // Aggregate by user
+          aggregation_size: Math.min(limit || 50, 50), // Cap at 50 for performance
+        };
+
+        if (site) params.site = site;
+        if (from) params.since = from;
+        if (to) params.until = to;
+
+        console.log(`   API params:`, JSON.stringify(params));
+
+        const response = await client.activity(params);
+
+        // Extract buckets from aggregations
+        // The aggregation key is the field name we aggregated by, not 'agg'
+        const aggKey = Object.keys(response.aggregations || {})[0];
+        const buckets = aggKey ? ((response.aggregations[aggKey] as any)?.buckets || []) : [];
+
+        console.log(`   Response: ${Object.keys(response.aggregations || {}).length} aggregation keys`);
+        console.log(`   Buckets in '${aggKey || 'none'}': ${buckets.length}`);
+
+        return {
+          success: true,
+          users: buckets.map((bucket: any) => ({
+            username: bucket.key,
+            post_count: bucket.doc_count,
+          })),
+          total: buckets.length,
+          query: term,
+        };
+      } catch (error: any) {
+        return {
+          success: false,
+          error: error.message || String(error),
+        };
+      }
+    },
+  },
+  {
+    name: 'get_channel_activity_for_topic',
+    description: 'Aggregate which channels/groups posted the MOST about a search term. Returns counts of posts per channel. Perfect for finding most active channels discussing a topic.',
+    category: 'research',
+    use_cases: [
+      'Find channels posting most about a topic',
+      'Count channel activity for a keyword',
+      'Identify most active channels for a discussion',
+      'Rank channels by posts about a term',
+    ],
+    parameters: {
+      type: 'object',
+      properties: {
+        term: {
+          type: 'string',
+          description: 'Search term to find in post content',
+        },
+        site: {
+          type: 'string',
+          description: 'Platform: telegram, twitter, reddit, etc.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of channels to return (default: 50, max: 50 for performance)',
+        },
+        from: {
+          type: 'string',
+          description: 'Start date (ISO 8601)',
+        },
+        to: {
+          type: 'string',
+          description: 'End date (ISO 8601)',
+        },
+      },
+      required: ['term'],
+    },
+    handler: async (input: any, context: any) => {
+      const { term, site, limit, from, to } = input;
+
+      if (!term) {
+        return {
+          success: false,
+          error: 'Search term is required',
+        };
+      }
+
+      try {
+        // Use longer timeout (120s) for aggregation queries
+        const client = await getClient(context.credentials?.open_measures_api_key, 120000);
+
+        console.log(`🔍 OpenMeasures activity query: term="${term}", site="${site || 'all'}", agg_size=${limit || 50}`);
+        console.log(`   Client tier: ${client.tier}`);
+
+        const params: any = {
+          term,
+          standard_fields: true,
+          agg_by: 'context.username', // Aggregate by channel/group
+          aggregation_size: Math.min(limit || 50, 50), // Cap at 50 for performance
+        };
+
+        if (site) params.site = site;
+        if (from) params.since = from;
+        if (to) params.until = to;
+
+        console.log(`   API params:`, JSON.stringify(params));
+
+        const response = await client.activity(params);
+
+        // Extract buckets from aggregations
+        // The aggregation key is the field name we aggregated by, not 'agg'
+        const aggKey = Object.keys(response.aggregations || {})[0];
+        const buckets = aggKey ? ((response.aggregations[aggKey] as any)?.buckets || []) : [];
+
+        console.log(`   Response: ${Object.keys(response.aggregations || {}).length} aggregation keys`);
+        console.log(`   Buckets in '${aggKey || 'none'}': ${buckets.length}`);
+
+        return {
+          success: true,
+          channels: buckets.map((bucket: any) => ({
+            channel: bucket.key,
+            post_count: bucket.doc_count,
+          })),
+          total: buckets.length,
           query: term,
         };
       } catch (error: any) {
