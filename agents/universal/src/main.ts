@@ -225,6 +225,7 @@ export class UniversalAgent {
         github_token: process.env.GITHUB_TOKEN || '',
         notion_token: process.env.NOTION_API_KEY || '',
         attio_token: process.env.ATTIO_API_KEY || '',
+        open_measures_api_key: process.env.OPEN_MEASURES_API_KEY || '',
       },
     };
 
