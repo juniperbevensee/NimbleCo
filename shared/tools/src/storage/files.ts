@@ -9,7 +9,10 @@ import * as path from 'path';
 import { Tool, ToolContext } from '../base';
 
 // Local fallback storage when S3 is not configured
-const LOCAL_STORAGE_ROOT = process.env.FILE_STORAGE_PATH || path.resolve(process.cwd(), 'storage/files');
+// Computed at runtime to ensure dotenv has loaded
+function getLocalStorageRoot(): string {
+  return process.env.FILE_STORAGE_PATH || path.resolve(process.cwd(), 'storage/files');
+}
 
 /**
  * Upload a file to storage
@@ -50,8 +53,8 @@ export const uploadFile: Tool = {
 
     // Use local storage as fallback
     const targetDir = folder
-      ? path.join(LOCAL_STORAGE_ROOT, folder)
-      : LOCAL_STORAGE_ROOT;
+      ? path.join(getLocalStorageRoot(), folder)
+      : getLocalStorageRoot();
 
     await fs.mkdir(targetDir, { recursive: true });
 
@@ -59,7 +62,7 @@ export const uploadFile: Tool = {
 
     // Security: ensure path is within storage root
     const resolvedPath = path.resolve(filepath);
-    if (!resolvedPath.startsWith(path.resolve(LOCAL_STORAGE_ROOT))) {
+    if (!resolvedPath.startsWith(path.resolve(getLocalStorageRoot()))) {
       return {
         success: false,
         error: 'Access denied: path must be within storage root',
@@ -110,11 +113,11 @@ export const downloadFile: Tool = {
   async handler(input: { path: string }, ctx: ToolContext) {
     const filepath = path.isAbsolute(input.path)
       ? input.path
-      : path.join(LOCAL_STORAGE_ROOT, input.path);
+      : path.join(getLocalStorageRoot(), input.path);
 
     // Security check
     const resolvedPath = path.resolve(filepath);
-    if (!resolvedPath.startsWith(path.resolve(LOCAL_STORAGE_ROOT))) {
+    if (!resolvedPath.startsWith(path.resolve(getLocalStorageRoot()))) {
       return {
         success: false,
         error: 'Access denied: path must be within storage root',
@@ -164,12 +167,12 @@ export const listFiles: Tool = {
   },
   async handler(input: { folder?: string }, ctx: ToolContext) {
     const targetDir = input.folder
-      ? path.join(LOCAL_STORAGE_ROOT, input.folder)
-      : LOCAL_STORAGE_ROOT;
+      ? path.join(getLocalStorageRoot(), input.folder)
+      : getLocalStorageRoot();
 
     // Security check
     const resolvedDir = path.resolve(targetDir);
-    if (!resolvedDir.startsWith(path.resolve(LOCAL_STORAGE_ROOT))) {
+    if (!resolvedDir.startsWith(path.resolve(getLocalStorageRoot()))) {
       return {
         success: false,
         error: 'Access denied: path must be within storage root',
@@ -177,7 +180,7 @@ export const listFiles: Tool = {
     }
 
     try {
-      await fs.mkdir(LOCAL_STORAGE_ROOT, { recursive: true });
+      await fs.mkdir(getLocalStorageRoot(), { recursive: true });
       const entries = await fs.readdir(resolvedDir, { withFileTypes: true });
 
       const files = await Promise.all(

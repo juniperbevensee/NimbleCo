@@ -9,7 +9,10 @@ import * as path from 'path';
 import { Tool, ToolContext } from '../base';
 
 // Workspace root - configurable via environment
-const WORKSPACE_ROOT = process.env.WORKSPACE_PATH || path.resolve(process.cwd(), 'storage/workspace');
+// Computed at runtime to ensure dotenv has loaded
+function getWorkspaceRoot(): string {
+  return process.env.WORKSPACE_PATH || path.resolve(process.cwd(), 'storage/workspace');
+}
 
 interface LargeResultOptions {
   filenamePrefix?: string;
@@ -33,9 +36,9 @@ export async function handleLargeResult(
 
   // Save to workspace
   const filename = `${filenamePrefix}-${Date.now()}.json`;
-  const filepath = path.join(WORKSPACE_ROOT, filename);
+  const filepath = path.join(getWorkspaceRoot(), filename);
 
-  await fs.mkdir(WORKSPACE_ROOT, { recursive: true });
+  await fs.mkdir(getWorkspaceRoot(), { recursive: true });
   await fs.writeFile(filepath, serialized, 'utf-8');
 
   return {
@@ -91,11 +94,11 @@ export const readWorkspaceFile: Tool = {
     // Resolve path (allow both relative and absolute)
     const fullPath = path.isAbsolute(file_path)
       ? file_path
-      : path.join(WORKSPACE_ROOT, file_path);
+      : path.join(getWorkspaceRoot(), file_path);
 
     // Security: ensure path is within workspace
     const resolvedPath = path.resolve(fullPath);
-    if (!resolvedPath.startsWith(path.resolve(WORKSPACE_ROOT))) {
+    if (!resolvedPath.startsWith(path.resolve(getWorkspaceRoot()))) {
       return {
         success: false,
         error: 'Access denied: path must be within workspace',
@@ -168,12 +171,12 @@ export const listWorkspace: Tool = {
   },
   async handler(input: { subdirectory?: string }, ctx: ToolContext) {
     const targetDir = input.subdirectory
-      ? path.join(WORKSPACE_ROOT, input.subdirectory)
-      : WORKSPACE_ROOT;
+      ? path.join(getWorkspaceRoot(), input.subdirectory)
+      : getWorkspaceRoot();
 
     // Security check
     const resolvedDir = path.resolve(targetDir);
-    if (!resolvedDir.startsWith(path.resolve(WORKSPACE_ROOT))) {
+    if (!resolvedDir.startsWith(path.resolve(getWorkspaceRoot()))) {
       return {
         success: false,
         error: 'Access denied: path must be within workspace',
@@ -181,7 +184,7 @@ export const listWorkspace: Tool = {
     }
 
     try {
-      await fs.mkdir(WORKSPACE_ROOT, { recursive: true });
+      await fs.mkdir(getWorkspaceRoot(), { recursive: true });
       const entries = await fs.readdir(resolvedDir, { withFileTypes: true });
 
       const files = await Promise.all(
@@ -255,11 +258,11 @@ export const moveWorkspaceFileToStorage: Tool = {
     // Resolve source path in workspace
     const sourcePath = path.isAbsolute(workspace_file)
       ? workspace_file
-      : path.join(WORKSPACE_ROOT, workspace_file);
+      : path.join(getWorkspaceRoot(), workspace_file);
 
     // Security: ensure source is within workspace
     const resolvedSource = path.resolve(sourcePath);
-    if (!resolvedSource.startsWith(path.resolve(WORKSPACE_ROOT))) {
+    if (!resolvedSource.startsWith(path.resolve(getWorkspaceRoot()))) {
       return {
         success: false,
         error: 'Access denied: source file must be within workspace',
