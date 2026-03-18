@@ -76,13 +76,17 @@ async function fetchWebContent(url: string, maxLength: number = 10000): Promise<
 export const webTools: Tool[] = [
   {
     name: 'fetch_webpage',
-    description: 'Fetch and extract text content from a webpage. Returns the text content with HTML tags removed.',
+    description: 'Fetch and extract text content from any webpage or URL. Use this to search Craigslist, read articles, browse listings, check prices, research products, or access any public website.',
     category: 'web',
     use_cases: [
-      'Summarize a webpage',
-      'Extract information from a URL',
-      'Research a topic online',
-      'Read documentation from a website',
+      'Search Craigslist for cars, apartments, or items',
+      'Find listings and classified ads online',
+      'Browse marketplace websites',
+      'Check prices and product information',
+      'Research topics and read articles online',
+      'Extract information from any public URL',
+      'Summarize webpage content',
+      'Read documentation from websites',
     ],
     parameters: {
       type: 'object',
