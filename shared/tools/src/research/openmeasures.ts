@@ -19,6 +19,18 @@ function getClient(apiKey?: string): OpenMeasuresClient {
     console.log('⚠️  OPEN_MEASURES_API_KEY not found in context.credentials or process.env');
   } else {
     console.log(`✓ Using Open Measures API key: ${finalKey.substring(0, 20)}...`);
+
+    // Decode JWT to check expiration (JWTs are base64 encoded JSON)
+    try {
+      const payload = JSON.parse(Buffer.from(finalKey.split('.')[1], 'base64').toString());
+      if (payload.exp) {
+        const expDate = new Date(payload.exp * 1000);
+        const now = new Date();
+        console.log(`   Token expires: ${expDate.toISOString()} (${expDate > now ? 'valid' : 'EXPIRED'})`);
+      }
+    } catch (e) {
+      // If we can't decode, just continue
+    }
   }
 
   return new OpenMeasuresClient({
