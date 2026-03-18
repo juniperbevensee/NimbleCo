@@ -42,6 +42,18 @@ sleep 2
 echo "🧹 Clearing stale post claims..."
 docker exec nimble-postgres psql -U agent -d nimbleco -c "DELETE FROM processed_posts;" > /dev/null 2>&1 || echo "   ⚠️  Could not clear post claims (DB might not be ready)"
 
+# Force reload of .env by clearing relevant environment variables
+# This ensures newly added .env variables get picked up
+echo "🔄 Reloading environment variables..."
+# List of known NimbleCo env vars - clear them so dotenv will reload from .env
+for var in GOOGLE_CLOUD_API_KEY GOOGLE_MODEL GOOGLE_MAX_OUTPUT_TOKENS \
+           OPEN_MEASURES_API_KEY OPEN_MEASURES_REFRESH_TOKEN \
+           ANTHROPIC_API_KEY ANTHROPIC_MODEL \
+           VERTEX_AI_PROJECT VERTEX_AI_LOCATION \
+           AWS_REGION BEDROCK_MODEL_ID AWS_BEARER_TOKEN_BEDROCK; do
+  unset $var 2>/dev/null || true
+done
+
 # Rebuild
 echo "🔨 Rebuilding..."
 npm run build --workspaces --if-present 2>/dev/null || npm run build
