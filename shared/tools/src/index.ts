@@ -3,16 +3,21 @@
 
 import { Tool, ToolRegistry, TieredToolLoader, ToolContext } from './base';
 import { checkToolPermission, extractTargetRoom, ToolPermissionContext } from './permissions';
+import { filterToolsByAccessTier, getLlmModelForUser, isProviderAllowed, getAccessTierConfig } from './access-tiers';
 import { attioTools } from './crm/attio';
 import { jitsiTools } from './meetings/jitsi';
 import { notionTools } from './docs/notion';
 import { icsCalendarTools } from './calendar/ics';
 import { fileStorageTools } from './storage/files';
 import { workspaceTools } from './storage/workspace';
+import { batchProcessorTools } from './storage/batch-processor';
 import { filesystemTools } from './filesystem/tools';
 import { githubTools } from './code/github';
 import { webTools } from './web/fetch';
 import { computeTools } from './compute/javascript';
+import { dataScienceTools } from './compute/data-science';
+import { advancedDataScienceTools } from './compute/data-science-advanced';
+import { textAnalysisBatchTools } from './compute/text-analysis-batch';
 import { openMeasuresTools } from './research/openmeasures';
 import { analyticsTools } from './analytics/database';
 import { invocationAnalyticsTools } from './analytics/invocations';
@@ -32,10 +37,14 @@ export const registry = new ToolRegistry();
   ...icsCalendarTools,
   ...fileStorageTools,
   ...workspaceTools,
+  ...batchProcessorTools,
   ...filesystemTools,
   ...githubTools,
   ...webTools,
   ...computeTools,
+  ...dataScienceTools,
+  ...advancedDataScienceTools,
+  ...textAnalysisBatchTools,
   ...openMeasuresTools,
   ...analyticsTools,
   ...invocationAnalyticsTools,
@@ -106,9 +115,12 @@ export class SmartToolSelector {
       ...this.registry.getByCategory('crm').slice(0, 3),
       ...this.registry.getByCategory('meetings').slice(0, 2),
       ...this.registry.getByCategory('docs').slice(0, 3),
-      // Memory tools should ALWAYS be available since system prompt references them
+      // Memory and workspace tools should ALWAYS be available since system prompt references them
       ...this.registry.getByCategory('storage').filter(t =>
-        t.name === 'read_agent_memory' || t.name === 'append_agent_memory'
+        t.name === 'read_agent_memory' ||
+        t.name === 'append_agent_memory' ||
+        t.name === 'list_workspace' ||
+        t.name === 'read_workspace_file'
       ),
     ];
   }
@@ -253,6 +265,7 @@ export async function executeToolCall(
 // Export everything
 export * from './base';
 export * from './permissions';
+export * from './access-tiers';
 export * from './crm/attio';
 export * from './meetings/jitsi';
 export * from './docs/notion';
@@ -280,6 +293,33 @@ export const promptBuilder = new CachedPromptBuilder(toolSelector, registry);
 // Get tools for a specific task (main API)
 export function getToolsForTask(taskDescription: string): Tool[] {
   return promptBuilder.buildTaskTools(taskDescription);
+}
+
+/**
+ * Get tools for a task, filtered by user access tier
+ * Non-admin users won't see admin-only tools
+ */
+export function getToolsForTaskWithAccessTier(
+  taskDescription: string,
+  isAdmin: boolean
+): Tool[] {
+  const allTools = promptBuilder.buildTaskTools(taskDescription);
+  return filterToolsByAccessTier(allTools, isAdmin);
+}
+
+/**
+ * Get the appropriate LLM model for a user
+ * Admins may get a more powerful model (e.g., Opus vs Sonnet)
+ */
+export function getModelForUser(isAdmin: boolean, requestedModel?: string): string | null {
+  return getLlmModelForUser(isAdmin, requestedModel);
+}
+
+/**
+ * Check if a user can use a specific LLM provider
+ */
+export function canUseProvider(provider: string, isAdmin: boolean): boolean {
+  return isProviderAllowed(provider, isAdmin);
 }
 
 // Get system prompt (for agent initialization)

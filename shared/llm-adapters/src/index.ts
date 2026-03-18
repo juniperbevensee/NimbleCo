@@ -3,9 +3,25 @@
  * Supports: Ollama (local), Claude, Vertex AI, AWS Bedrock, Azure OpenAI, OpenRouter
  */
 
+export interface LLMContentBlock {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+}
+
 export interface LLMMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | LLMContentBlock[];
+}
+
+/**
+ * Helper to convert content blocks to a single string
+ */
+function contentToString(content: string | LLMContentBlock[]): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  return content.map(block => block.text).join('\n');
 }
 
 export interface LLMTool {
@@ -28,6 +44,8 @@ export interface LLMResponse {
     input_tokens: number;
     output_tokens: number;
     cost_usd?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
   };
   model: string;
   provider: string;
@@ -172,6 +190,14 @@ export class AnthropicAdapter extends LLMAdapter {
     const systemMessage = messages.find(m => m.role === 'system');
     const nonSystemMessages = messages.filter(m => m.role !== 'system');
 
+    // Convert system message to structured format if it's a string (for caching)
+    let systemContent: string | any[] | undefined;
+    if (systemMessage) {
+      systemContent = Array.isArray(systemMessage.content)
+        ? systemMessage.content
+        : systemMessage.content;
+    }
+
     // Retry logic for rate limits
     // 1 retry (2 attempts total) before falling back
     const maxRetries = 2;
@@ -183,7 +209,7 @@ export class AnthropicAdapter extends LLMAdapter {
           model: this.config.model,
           max_tokens: this.config.max_tokens ?? 4096,
           temperature: this.config.temperature ?? 0.7,
-          system: systemMessage?.content,
+          system: systemContent as any,
           messages: nonSystemMessages as any,
           tools: tools as any,
         });
@@ -193,18 +219,33 @@ export class AnthropicAdapter extends LLMAdapter {
           .filter(c => c.type === 'tool_use')
           .map((c: any) => ({ name: c.name, input: c.input }));
 
+        // Extract cache statistics
+        const usage: any = {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+        };
+
+        // Add cache stats if present
+        if ((response.usage as any).cache_creation_input_tokens) {
+          usage.cache_creation_input_tokens = (response.usage as any).cache_creation_input_tokens;
+        }
+        if ((response.usage as any).cache_read_input_tokens) {
+          usage.cache_read_input_tokens = (response.usage as any).cache_read_input_tokens;
+        }
+
+        // Calculate cost including cache pricing
+        usage.cost_usd = this.calculateCostWithCache(
+          response.usage.input_tokens,
+          response.usage.output_tokens,
+          (response.usage as any).cache_creation_input_tokens || 0,
+          (response.usage as any).cache_read_input_tokens || 0,
+          this.config.model
+        );
+
         return {
           content: textContent ? (textContent as any).text : '',
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-          usage: {
-            input_tokens: response.usage.input_tokens,
-            output_tokens: response.usage.output_tokens,
-            cost_usd: this.calculateCost(
-              response.usage.input_tokens,
-              response.usage.output_tokens,
-              this.config.model
-            ),
-          },
+          usage,
           model: this.config.model,
           provider: 'anthropic',
         };
@@ -264,6 +305,35 @@ export class AnthropicAdapter extends LLMAdapter {
     const price = pricing[model] || pricing['claude-sonnet-3-5-20241022'];
     return ((inputTokens * price.input) + (outputTokens * price.output)) / 1_000_000;
   }
+
+  private calculateCostWithCache(
+    inputTokens: number,
+    outputTokens: number,
+    cacheCreationTokens: number,
+    cacheReadTokens: number,
+    model: string
+  ): number {
+    // Pricing as of 2025 (per 1M tokens)
+    const pricing: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+      'claude-opus-4-5-20251101': { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.5 },
+      'claude-sonnet-4-5-20250929': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+      'claude-sonnet-3-5-20241022': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+      'claude-haiku-3-5-20241022': { input: 0.8, output: 4, cacheWrite: 1.0, cacheRead: 0.08 },
+    };
+
+    const price = pricing[model] || pricing['claude-sonnet-3-5-20241022'];
+
+    // Regular input tokens (not cached)
+    const regularInputTokens = inputTokens - cacheCreationTokens - cacheReadTokens;
+
+    const cost =
+      (regularInputTokens * price.input +
+       cacheCreationTokens * price.cacheWrite +
+       cacheReadTokens * price.cacheRead +
+       outputTokens * price.output) / 1_000_000;
+
+    return cost;
+  }
 }
 
 /**
@@ -292,7 +362,7 @@ export class VertexAdapter extends LLMAdapter {
     // Convert messages to Vertex format
     const contents = messages.map(msg => ({
       role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }],
+      parts: [{ text: contentToString(msg.content) }],
     }));
 
     const result = await model.generateContent({
@@ -330,7 +400,7 @@ export class VertexAdapter extends LLMAdapter {
 
     const contents = messages.map(msg => ({
       role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }],
+      parts: [{ text: contentToString(msg.content) }],
     }));
 
     const result = await model.generateContentStream({ contents });
@@ -345,18 +415,26 @@ export class VertexAdapter extends LLMAdapter {
 /**
  * Google AI (Gemini API) adapter
  * Uses API key for direct Gemini API access
+ * Supports custom baseUrl for Vertex AI endpoint
  */
 export class GoogleAIAdapter extends LLMAdapter {
   private apiKey: string;
+  private baseUrl?: string;
 
-  constructor(config: LLMConfig, apiKey: string) {
+  constructor(config: LLMConfig, apiKey: string, baseUrl?: string) {
     super(config);
     this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
   }
 
   async chat(messages: LLMMessage[], tools?: LLMTool[]): Promise<LLMResponse> {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    // If custom baseUrl provided (Vertex AI), use direct fetch
+    if (this.baseUrl) {
+      return this.chatVertexAI(messages, tools);
+    }
 
+    // Otherwise use Google AI Studio SDK
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(this.apiKey);
     const model = genAI.getGenerativeModel({ model: this.config.model });
 
@@ -365,11 +443,12 @@ export class GoogleAIAdapter extends LLMAdapter {
       .filter(m => m.role !== 'system')
       .map(msg => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }],
+        parts: [{ text: contentToString(msg.content) }],
       }));
 
     // Extract system instruction
-    const systemInstruction = messages.find(m => m.role === 'system')?.content;
+    const systemMessage = messages.find(m => m.role === 'system');
+    const systemInstruction = systemMessage ? contentToString(systemMessage.content) : undefined;
 
     const result = await model.generateContent({
       contents,
@@ -395,9 +474,111 @@ export class GoogleAIAdapter extends LLMAdapter {
     };
   }
 
-  async *stream(messages: LLMMessage[], tools?: LLMTool[]): AsyncGenerator<string> {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  private async chatVertexAI(messages: LLMMessage[], tools?: LLMTool[]): Promise<LLMResponse> {
+    // Direct fetch to Vertex AI endpoint with API key
+    const url = `${this.baseUrl}/publishers/google/models/${this.config.model}:generateContent?key=${this.apiKey}`;
 
+    // Convert messages to Vertex AI format
+    const contents = messages
+      .filter(m => m.role !== 'system')
+      .map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: contentToString(msg.content) }],
+      }));
+
+    // Extract system instruction
+    const systemMessage = messages.find(m => m.role === 'system');
+    const systemInstruction = systemMessage ? contentToString(systemMessage.content) : undefined;
+
+    const body: any = {
+      contents,
+      generationConfig: {
+        temperature: this.config.temperature ?? 0.7,
+        maxOutputTokens: this.config.max_tokens ?? 30000,
+      },
+    };
+
+    if (systemInstruction) {
+      body.systemInstruction = { parts: [{ text: systemInstruction }] };
+    }
+
+    // Add tools if provided (convert to Gemini format)
+    if (tools && tools.length > 0) {
+      body.tools = [{
+        functionDeclarations: tools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.input_schema,
+        })),
+      }];
+      console.log(`🔧 Vertex AI: Sending ${tools.length} tools in request`);
+      console.log(`   Tool names: ${tools.map(t => t.name).join(', ').substring(0, 200)}`);
+    } else {
+      console.log('⚠️  Vertex AI: No tools provided in request');
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Vertex AI error (${response.status}): ${text}`);
+    }
+
+    const data = await response.json() as any;
+
+    // Parse parts for text and tool calls
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    console.log(`📥 Vertex AI response: ${parts.length} parts`);
+    parts.forEach((part: any, i: number) => {
+      const keys = Object.keys(part);
+      console.log(`   Part ${i}: ${keys.join(', ')}`);
+    });
+
+    let text = '';
+    const toolCalls: Array<{ name: string; input: Record<string, any> }> = [];
+
+    for (const part of parts) {
+      if (part.text) {
+        text += part.text;
+      } else if (part.functionCall) {
+        console.log(`🔧 Found function call: ${part.functionCall.name}`);
+        toolCalls.push({
+          name: part.functionCall.name,
+          input: part.functionCall.args || {},
+        });
+      }
+    }
+
+    if (toolCalls.length > 0) {
+      console.log(`✅ Extracted ${toolCalls.length} tool calls from Vertex AI response`);
+    } else if (text && parts.length > 0) {
+      console.log(`⚠️  Vertex AI returned text only, no function calls`);
+    }
+
+    return {
+      content: text,
+      tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+      usage: {
+        input_tokens: data.usageMetadata?.promptTokenCount || 0,
+        output_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+        cost_usd: 0, // Free tier
+      },
+      model: this.config.model,
+      provider: 'google-ai',
+    };
+  }
+
+  async *stream(messages: LLMMessage[], tools?: LLMTool[]): AsyncGenerator<string> {
+    // If custom baseUrl, streaming not yet implemented for Vertex AI
+    if (this.baseUrl) {
+      throw new Error('Streaming not yet implemented for Vertex AI endpoint');
+    }
+
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(this.apiKey);
     const model = genAI.getGenerativeModel({ model: this.config.model });
 
@@ -405,7 +586,7 @@ export class GoogleAIAdapter extends LLMAdapter {
       .filter(m => m.role !== 'system')
       .map(msg => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }],
+        parts: [{ text: contentToString(msg.content) }],
       }));
 
     const result = await model.generateContentStream({ contents });
@@ -450,7 +631,7 @@ export class BedrockAdapter extends LLMAdapter {
     // Convert to Bedrock Converse format
     const converseMessages = nonSystemMessages.map(msg => ({
       role: msg.role,
-      content: [{ text: msg.content }],
+      content: [{ text: contentToString(msg.content) }],
     }));
 
     // Build request body
@@ -463,7 +644,7 @@ export class BedrockAdapter extends LLMAdapter {
     };
 
     if (systemMessage) {
-      body.system = [{ text: systemMessage.content }];
+      body.system = [{ text: contentToString(systemMessage.content) }];
     }
 
     if (tools && tools.length > 0) {
@@ -658,7 +839,7 @@ export function createLLM(
 
     case 'google-ai':
       if (!options.apiKey) throw new Error('Google AI API key required');
-      return new GoogleAIAdapter(config, options.apiKey);
+      return new GoogleAIAdapter(config, options.apiKey, options.baseUrl);
 
     case 'vertex':
       if (!options.projectId) throw new Error('Vertex project ID required');
@@ -673,7 +854,18 @@ export function createLLM(
 }
 
 /**
+ * User context for access tier filtering
+ */
+export interface LLMUserContext {
+  isAdmin: boolean;
+  userId?: string;
+  allowedProviders?: Set<string>;
+  preferredModel?: string;
+}
+
+/**
  * Smart LLM router that picks the best provider based on task type and cost
+ * Supports access tier filtering for admin vs non-admin users
  */
 export class LLMRouter {
   private adapters: Map<string, LLMAdapter> = new Map();
@@ -697,10 +889,39 @@ export class LLMRouter {
     this.adapters.set(name, adapter);
   }
 
+  /**
+   * Chat with access tier filtering
+   * Respects user's allowed providers and preferred model
+   */
+  async chatWithAccessTier(
+    taskType: 'quick' | 'code' | 'complex' | string,
+    messages: LLMMessage[],
+    tools: LLMTool[] | undefined,
+    userContext: LLMUserContext
+  ): Promise<LLMResponse> {
+    // If user has a preferred model and it's a registered adapter, use it
+    if (userContext.preferredModel && this.adapters.has(userContext.preferredModel)) {
+      // Check if user is allowed to use this provider
+      if (!userContext.allowedProviders || userContext.allowedProviders.has(userContext.preferredModel)) {
+        const adapter = this.adapters.get(userContext.preferredModel)!;
+        const response = await adapter.chat(messages, tools);
+        if (response.usage?.cost_usd) {
+          this.dailyCost += response.usage.cost_usd;
+        }
+        return response;
+      }
+      console.log(`⚠️ User requested ${userContext.preferredModel} but not allowed, using tier default`);
+    }
+
+    // Use regular chat with filtered adapters
+    return this.chat(taskType, messages, tools, userContext.allowedProviders);
+  }
+
   async chat(
     taskType: 'quick' | 'code' | 'complex' | string,
     messages: LLMMessage[],
-    tools?: LLMTool[]
+    tools?: LLMTool[],
+    allowedProviders?: Set<string>
   ): Promise<LLMResponse> {
     // Check if taskType is actually a specific model name
     if (this.adapters.has(taskType)) {
@@ -712,8 +933,8 @@ export class LLMRouter {
       return response;
     }
 
-    // Get prioritized list of adapters to try
-    const adaptersToTry = this.getAdapterPriorityList(taskType);
+    // Get prioritized list of adapters to try (filtered by allowed providers if set)
+    const adaptersToTry = this.getAdapterPriorityList(taskType, allowedProviders);
 
     let lastError: Error | null = null;
 
@@ -751,12 +972,19 @@ export class LLMRouter {
     throw new Error(`All LLM adapters failed. Last error: ${lastError?.message}`);
   }
 
-  private getAdapterPriorityList(taskType: string): Array<{ name: string; adapter: LLMAdapter }> {
+  private getAdapterPriorityList(
+    taskType: string,
+    allowedProviders?: Set<string>
+  ): Array<{ name: string; adapter: LLMAdapter }> {
     const priorityList: Array<{ name: string; adapter: LLMAdapter }> = [];
 
-    // Helper to add adapter if available and not failed
+    // Helper to add adapter if available, not failed, and allowed
     const tryAddAdapter = (name: string) => {
       if (this.adapters.has(name) && !this.failedAdapters.has(name)) {
+        // If allowedProviders is set, check if this provider is allowed
+        if (allowedProviders && allowedProviders.size > 0 && !allowedProviders.has(name)) {
+          return; // Skip this provider
+        }
         priorityList.push({ name, adapter: this.adapters.get(name)! });
       }
     };
@@ -792,8 +1020,8 @@ export class LLMRouter {
     return priorityList;
   }
 
-  private selectAdapter(taskType: string): LLMAdapter {
-    const priorityList = this.getAdapterPriorityList(taskType);
+  private selectAdapter(taskType: string, allowedProviders?: Set<string>): LLMAdapter {
+    const priorityList = this.getAdapterPriorityList(taskType, allowedProviders);
     return priorityList[0].adapter;
   }
 

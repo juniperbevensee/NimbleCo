@@ -5,9 +5,14 @@
  * - Admins can use sensitive tools for any room
  * - Non-admins can only use sensitive tools for their current room
  * - Prevents privacy violations (e.g., viewing logs of rooms you're not in)
+ *
+ * Access Tiers (configured via env vars):
+ * - ADMIN_ONLY_TOOLS: Comma-separated tool names restricted to admins
+ * - ADMIN_ONLY_CATEGORIES: Comma-separated categories restricted to admins
  */
 
 import { Tool } from './base';
+import { isToolAdminOnly } from './access-tiers';
 
 export interface ToolPermissionContext {
   userId: string;
@@ -30,14 +35,23 @@ export function checkToolPermission(
   tool: Tool,
   context: ToolPermissionContext
 ): PermissionCheckResult {
-  // No permissions specified = tool is public
+  // First check: Access tier restrictions (from env config)
+  // This applies even if tool.permissions is not set
+  if (!context.isAdmin && isToolAdminOnly(tool.name, tool.category)) {
+    return {
+      allowed: false,
+      reason: `🔒 The "${tool.name}" tool is restricted to admin users. Contact a workspace admin for access.`,
+    };
+  }
+
+  // No additional permissions specified = tool is public
   if (!tool.permissions) {
     return { allowed: true };
   }
 
   const { requiresAdmin, requiresContextRoom, sensitiveReason } = tool.permissions;
 
-  // Admin-only tools
+  // Admin-only tools (explicit in tool definition)
   if (requiresAdmin && !context.isAdmin) {
     return {
       allowed: false,

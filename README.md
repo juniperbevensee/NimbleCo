@@ -425,6 +425,16 @@ See [Security Hardening Guide](./docs/security-hardening.md) for implementation 
   - Switch between local dev, staging, production configs easily
   - Support `.env.local`, `.env.staging`, `.env.prod` naming pattern
   - CLI command to switch active persona
+- **Fine-grained access control (dashboard)**: Per-user tool and LLM permissions
+  - Grant/revoke specific tools for individual users (not just admin/non-admin)
+  - Private tool sets for specific users (e.g., OSINT tools in private channels)
+  - Per-user LLM model and provider restrictions
+  - Dashboard UI for managing access policies
+- **Containerized persona environments**: Full isolation for different deployment contexts
+  - Each persona runs in its own container with separate env/secrets
+  - Network policies prevent cross-persona access
+  - Agents cannot access dashboard or internal services
+  - Proper sandboxing for untrusted tool execution
 
 ### Phase 2.5: Agentic Swarms
 - **Tool-using swarm agents**: Currently conversation-mode swarms skip tools to stay under the

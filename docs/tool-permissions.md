@@ -168,6 +168,37 @@ Admin configuration is saved in `.setup-last-session`:
 # Admin config automatically restored
 ```
 
+### Access Tiers (Tools & LLM Models)
+
+Control which tools and LLM models are available to admin vs non-admin users.
+
+```bash
+# Tools restricted to admin users only (comma-separated tool names)
+ADMIN_ONLY_TOOLS=update_attio_person,create_notion_page,create_github_issue
+
+# Entire categories restricted to admins (comma-separated)
+ADMIN_ONLY_CATEGORIES=crm,code
+
+# LLM model for admin users (more powerful/expensive)
+ADMIN_LLM_MODEL=claude-opus-4-5-20251101
+
+# LLM model for non-admin users (cost-effective)
+USER_LLM_MODEL=claude-sonnet-4-5-20250929
+
+# LLM providers admins can use (comma-separated)
+ADMIN_LLM_PROVIDERS=bedrock,anthropic
+
+# LLM providers non-admins can use
+USER_LLM_PROVIDERS=ollama,vertex
+```
+
+**Default admin-only tools** (if `ADMIN_ONLY_TOOLS` not set):
+- CRM tools: `update_attio_person`, `add_attio_note`, `link_attio_person_company`
+- Docs tools: `create_notion_page`, `update_notion_page`, `search_notion`
+- Code tools: `create_github_issue`, `create_pull_request`, `merge_pull_request`, `github_search`
+
+To allow all users access to these tools, set `ADMIN_ONLY_TOOLS=` (empty).
+
 ## Creating Sensitive Tools
 
 ### Example: Room Log Viewer
