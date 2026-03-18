@@ -7,34 +7,38 @@
 import { Tool } from '../base';
 import { OpenMeasuresClient } from 'open-measures';
 import { handleLargeResult } from '../storage/workspace';
+import { initializeTokenManager, getValidAccessToken, isInitialized } from './openmeasures-token-manager';
 
 /**
- * Get or create Open Measures client
+ * Get or create Open Measures client with automatic token refresh
  */
-function getClient(apiKey?: string): OpenMeasuresClient {
-  const finalKey = apiKey || process.env.OPEN_MEASURES_API_KEY;
+async function getClient(apiKey?: string): Promise<OpenMeasuresClient> {
+  const providedKey = apiKey || process.env.OPEN_MEASURES_API_KEY;
+  const refreshToken = process.env.OPEN_MEASURES_REFRESH_TOKEN;
 
-  // Debug: Check if API key is present
-  if (!finalKey) {
+  if (!providedKey) {
     console.log('⚠️  OPEN_MEASURES_API_KEY not found in context.credentials or process.env');
-  } else {
-    console.log(`✓ Using Open Measures API key: ${finalKey.substring(0, 20)}...`);
+    throw new Error('OPEN_MEASURES_API_KEY required');
+  }
 
-    // Decode JWT to check expiration (JWTs are base64 encoded JSON)
-    try {
-      const payload = JSON.parse(Buffer.from(finalKey.split('.')[1], 'base64').toString());
-      if (payload.exp) {
-        const expDate = new Date(payload.exp * 1000);
-        const now = new Date();
-        console.log(`   Token expires: ${expDate.toISOString()} (${expDate > now ? 'valid' : 'EXPIRED'})`);
-      }
-    } catch (e) {
-      // If we can't decode, just continue
-    }
+  // Initialize token manager if not already done
+  if (!isInitialized() && refreshToken) {
+    console.log('🔧 Initializing Open Measures token manager with refresh support');
+    initializeTokenManager(providedKey, refreshToken);
+  }
+
+  // Get a valid token (will auto-refresh if needed)
+  let validToken: string;
+  if (isInitialized()) {
+    validToken = await getValidAccessToken();
+  } else {
+    // No refresh token available, use provided token directly
+    console.log('⚠️  No OPEN_MEASURES_REFRESH_TOKEN found - token will not auto-refresh');
+    validToken = providedKey;
   }
 
   return new OpenMeasuresClient({
-    apiKey: finalKey,
+    apiKey: validToken,
   });
 }
 
@@ -87,7 +91,7 @@ export const openMeasuresTools: Tool[] = [
       }
 
       try {
-        const client = getClient(context.credentials?.open_measures_api_key);
+        const client = await getClient(context.credentials?.open_measures_api_key);
 
         const params: any = {
           term,
@@ -165,7 +169,7 @@ export const openMeasuresTools: Tool[] = [
       }
 
       try {
-        const client = getClient(context.credentials?.open_measures_api_key);
+        const client = await getClient(context.credentials?.open_measures_api_key);
 
         const params: any = {
           term,
@@ -231,7 +235,7 @@ export const openMeasuresTools: Tool[] = [
       }
 
       try {
-        const client = getClient(context.credentials?.open_measures_api_key);
+        const client = await getClient(context.credentials?.open_measures_api_key);
 
         const params: any = {
           term,
