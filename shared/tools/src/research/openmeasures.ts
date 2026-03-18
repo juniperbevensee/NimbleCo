@@ -12,8 +12,17 @@ import { handleLargeResult } from '../storage/workspace';
  * Get or create Open Measures client
  */
 function getClient(apiKey?: string): OpenMeasuresClient {
+  const finalKey = apiKey || process.env.OPEN_MEASURES_API_KEY;
+
+  // Debug: Check if API key is present
+  if (!finalKey) {
+    console.log('⚠️  OPEN_MEASURES_API_KEY not found in context.credentials or process.env');
+  } else {
+    console.log(`✓ Using Open Measures API key: ${finalKey.substring(0, 20)}...`);
+  }
+
   return new OpenMeasuresClient({
-    apiKey: apiKey || process.env.OPEN_MEASURES_API_KEY,
+    apiKey: finalKey,
   });
 }
 
