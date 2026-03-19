@@ -179,7 +179,7 @@ function InvocationStats() {
               height={100}
               tick={{ fill: '#dddddd', fontSize: 11 }}
             />
-            <YAxis tick={{ fill: '#dddddd' }} />
+            <YAxis domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]} tick={{ fill: '#dddddd' }} />
             <Tooltip contentStyle={{ backgroundColor: '#1b2c3e', border: '1px solid #4a5664', color: '#dddddd' }} />
             <Legend />
             <Bar dataKey="total_invocations" fill="#4cbba4" name="Total Invocations" />
@@ -199,7 +199,7 @@ function InvocationStats() {
               height={100}
               tick={{ fill: '#dddddd', fontSize: 11 }}
             />
-            <YAxis tick={{ fill: '#dddddd' }} />
+            <YAxis domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]} tick={{ fill: '#dddddd' }} />
             <Tooltip contentStyle={{ backgroundColor: '#1b2c3e', border: '1px solid #4a5664', color: '#dddddd' }} />
             <Legend />
             <Bar dataKey="completed" fill="#65dcc8" name="Completed" />

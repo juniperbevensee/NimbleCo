@@ -32,6 +32,8 @@ app.get('/api/health', (req, res) => {
 app.get('/api/invocations/stats', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
+    const botId = req.query.bot_id as string | undefined;
+    const botFilter = botId ? `AND bot_id = '${botId}'` : '';
 
     const query = `
       SELECT
@@ -45,7 +47,7 @@ app.get('/api/invocations/stats', async (req, res) => {
         SUM(total_cost_usd) as total_cost_usd,
         AVG(duration_ms) as avg_duration_ms
       FROM invocations
-      WHERE started_at >= NOW() - INTERVAL '${days} days'
+      WHERE started_at >= NOW() - INTERVAL '${days} days' ${botFilter}
       GROUP BY DATE(started_at)
       ORDER BY date DESC
     `;
@@ -62,6 +64,8 @@ app.get('/api/invocations/stats', async (req, res) => {
 app.get('/api/invocations/users', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
+    const botId = req.query.bot_id as string | undefined;
+    const botFilter = botId ? `AND bot_id = '${botId}'` : '';
 
     const query = `
       SELECT
@@ -75,7 +79,7 @@ app.get('/api/invocations/users', async (req, res) => {
         AVG(duration_ms) as avg_duration_ms,
         MAX(started_at) as last_invocation_at
       FROM invocations
-      WHERE started_at >= NOW() - INTERVAL '${days} days'
+      WHERE started_at >= NOW() - INTERVAL '${days} days' ${botFilter}
       GROUP BY trigger_user_id
       ORDER BY total_invocations DESC
     `;
@@ -94,6 +98,7 @@ app.get('/api/invocations/recent', async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 50;
     const userFilter = req.query.user as string | undefined;
     const channelFilter = req.query.channel as string | undefined;
+    const botFilter = req.query.bot_id as string | undefined;
 
     let query = `
       SELECT
@@ -108,6 +113,7 @@ app.get('/api/invocations/recent', async (req, res) => {
         i.total_output_tokens,
         i.total_cost_usd,
         i.error,
+        i.bot_id,
         c.room_id as channel_id
       FROM invocations i
       LEFT JOIN conversations c ON i.conversation_id = c.id
@@ -126,6 +132,12 @@ app.get('/api/invocations/recent', async (req, res) => {
     if (channelFilter) {
       query += ` AND c.room_id = $${paramCount}`;
       params.push(channelFilter);
+      paramCount++;
+    }
+
+    if (botFilter) {
+      query += ` AND i.bot_id = $${paramCount}`;
+      params.push(botFilter);
       paramCount++;
     }
 
@@ -166,6 +178,7 @@ app.post('/api/mattermost/users', async (req, res) => {
         });
 
         if (!response.ok) {
+          console.error(`Failed to fetch user ${userId}: ${response.status} ${response.statusText}`);
           return { id: userId, username: null, display_name: null };
         }
 
@@ -178,6 +191,7 @@ app.post('/api/mattermost/users', async (req, res) => {
             : user.username,
         };
       } catch (err) {
+        console.error(`Error fetching user ${userId}:`, err instanceof Error ? err.message : err);
         return { id: userId, username: null, display_name: null };
       }
     });
@@ -223,6 +237,7 @@ app.post('/api/mattermost/channels', async (req, res) => {
         });
 
         if (!response.ok) {
+          console.error(`Failed to fetch channel ${channelId}: ${response.status} ${response.statusText}`);
           return { id: channelId, name: null, display_name: null };
         }
 
@@ -233,6 +248,7 @@ app.post('/api/mattermost/channels', async (req, res) => {
           display_name: channel.display_name || channel.name,
         };
       } catch (err) {
+        console.error(`Error fetching channel ${channelId}:`, err instanceof Error ? err.message : err);
         return { id: channelId, name: null, display_name: null };
       }
     });
@@ -358,15 +374,40 @@ app.get('/api/costs/overview', async (req, res) => {
   }
 });
 
+// Get list of all bots
+app.get('/api/bots', async (req, res) => {
+  try {
+    const query = `
+      SELECT DISTINCT
+        bot_id,
+        COUNT(DISTINCT i.id) as total_invocations,
+        MAX(i.started_at) as last_active
+      FROM invocations i
+      WHERE bot_id IS NOT NULL
+      GROUP BY bot_id
+      ORDER BY bot_id
+    `;
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching bots:', error);
+    res.status(500).json({ error: 'Failed to fetch bots' });
+  }
+});
+
 // Get system metrics
 app.get('/api/system/metrics', async (req, res) => {
   try {
+    const botId = req.query.bot_id as string | undefined;
+    const botFilter = botId ? `AND bot_id = '${botId}'` : '';
+
     const queries = {
-      totalInvocations: 'SELECT COUNT(*) as count FROM invocations',
-      todayInvocations: `SELECT COUNT(*) as count FROM invocations WHERE DATE(started_at) = CURRENT_DATE`,
+      totalInvocations: `SELECT COUNT(*) as count FROM invocations WHERE 1=1 ${botFilter}`,
+      todayInvocations: `SELECT COUNT(*) as count FROM invocations WHERE DATE(started_at) = CURRENT_DATE ${botFilter}`,
       activeAgents: `SELECT COUNT(*) as count FROM agents WHERE status = 'active'`,
-      totalCostToday: `SELECT COALESCE(SUM(total_cost_usd), 0) as cost FROM invocations WHERE DATE(started_at) = CURRENT_DATE`,
-      avgResponseTime: `SELECT AVG(duration_ms) as avg_ms FROM invocations WHERE completed_at >= NOW() - INTERVAL '1 hour'`,
+      totalCostToday: `SELECT COALESCE(SUM(total_cost_usd), 0) as cost FROM invocations WHERE DATE(started_at) = CURRENT_DATE ${botFilter}`,
+      avgResponseTime: `SELECT AVG(duration_ms) as avg_ms FROM invocations WHERE completed_at >= NOW() - INTERVAL '1 hour' ${botFilter}`,
     };
 
     const results = await Promise.all([

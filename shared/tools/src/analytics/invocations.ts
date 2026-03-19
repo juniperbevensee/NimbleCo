@@ -48,6 +48,10 @@ export const invocationAnalyticsTools: Tool[] = [
           type: 'string',
           description: 'Room to analyze (optional - defaults to current room)',
         },
+        bot_id: {
+          type: 'string',
+          description: 'Filter by bot ID (e.g., "personal", "osint", "cryptid") - optional',
+        },
         limit: {
           type: 'number',
           description: 'Number of invocations to return (default: 10, max: 50)',
@@ -84,6 +88,12 @@ export const invocationAnalyticsTools: Tool[] = [
         const params: any[] = [targetRoomId];
         let paramCount = 2;
 
+        if (input.bot_id) {
+          query += ` AND bot_id = $${paramCount}`;
+          params.push(input.bot_id);
+          paramCount++;
+        }
+
         if (input.status) {
           query += ` AND status = $${paramCount}`;
           params.push(input.status);
@@ -106,9 +116,11 @@ export const invocationAnalyticsTools: Tool[] = [
         return {
           success: true,
           room_id: targetRoomId,
+          bot_id: input.bot_id || 'all',
           total: result.rows.length,
           invocations: result.rows.map(row => ({
             id: row.id,
+            bot_id: row.bot_id,
             trigger_user: row.trigger_user_id,
             input: row.input_message?.substring(0, 200),
             status: row.status,
@@ -290,6 +302,10 @@ export const invocationAnalyticsTools: Tool[] = [
           type: 'string',
           description: 'Analyze specific room (optional - omit for global stats)',
         },
+        bot_id: {
+          type: 'string',
+          description: 'Filter by bot ID (e.g., "personal", "osint", "cryptid") - optional',
+        },
         days: {
           type: 'number',
           description: 'Number of days to analyze (default: 7, max: 30)',
@@ -306,6 +322,7 @@ export const invocationAnalyticsTools: Tool[] = [
         const db = getPool();
         const days = Math.min(input.days || 7, 30);
         const targetRoomId = input.room_id;
+        const targetBotId = input.bot_id;
 
         let query = `
           SELECT
@@ -321,15 +338,24 @@ export const invocationAnalyticsTools: Tool[] = [
         const params: any[] = [];
         let paramCount = 1;
 
-        if (targetRoomId) {
+        if (targetRoomId || targetBotId) {
           query += `
             JOIN invocations i ON tc.invocation_id = i.id
             JOIN conversations c ON i.conversation_id = c.id
-            WHERE c.room_id = $${paramCount}
-              AND tc.started_at > NOW() - INTERVAL '${days} days'
+            WHERE tc.started_at > NOW() - INTERVAL '${days} days'
           `;
-          params.push(targetRoomId);
-          paramCount++;
+
+          if (targetRoomId) {
+            query += ` AND c.room_id = $${paramCount}`;
+            params.push(targetRoomId);
+            paramCount++;
+          }
+
+          if (targetBotId) {
+            query += ` AND i.bot_id = $${paramCount}`;
+            params.push(targetBotId);
+            paramCount++;
+          }
         } else {
           query += ` WHERE tc.started_at > NOW() - INTERVAL '${days} days'`;
         }
@@ -344,6 +370,7 @@ export const invocationAnalyticsTools: Tool[] = [
         return {
           success: true,
           room_id: targetRoomId || 'all_rooms',
+          bot_id: targetBotId || 'all_bots',
           days_analyzed: days,
           tools: result.rows.map(row => ({
             tool_name: row.tool_name,
@@ -380,6 +407,10 @@ export const invocationAnalyticsTools: Tool[] = [
           type: 'string',
           description: 'Analyze specific room (optional - omit for global stats)',
         },
+        bot_id: {
+          type: 'string',
+          description: 'Filter by bot ID (e.g., "personal", "osint", "cryptid") - optional',
+        },
         days: {
           type: 'number',
           description: 'Number of days to analyze (default: 7, max: 30)',
@@ -396,6 +427,7 @@ export const invocationAnalyticsTools: Tool[] = [
         const db = getPool();
         const days = Math.min(input.days || 7, 30);
         const targetRoomId = input.room_id;
+        const targetBotId = input.bot_id;
 
         let query = `
           SELECT
@@ -412,15 +444,24 @@ export const invocationAnalyticsTools: Tool[] = [
         const params: any[] = [];
         let paramCount = 1;
 
-        if (targetRoomId) {
+        if (targetRoomId || targetBotId) {
           query += `
             JOIN invocations i ON lc.invocation_id = i.id
             JOIN conversations c ON i.conversation_id = c.id
-            WHERE c.room_id = $${paramCount}
-              AND lc.started_at > NOW() - INTERVAL '${days} days'
+            WHERE lc.started_at > NOW() - INTERVAL '${days} days'
           `;
-          params.push(targetRoomId);
-          paramCount++;
+
+          if (targetRoomId) {
+            query += ` AND c.room_id = $${paramCount}`;
+            params.push(targetRoomId);
+            paramCount++;
+          }
+
+          if (targetBotId) {
+            query += ` AND i.bot_id = $${paramCount}`;
+            params.push(targetBotId);
+            paramCount++;
+          }
         } else {
           query += ` WHERE lc.started_at > NOW() - INTERVAL '${days} days'`;
         }
@@ -435,6 +476,7 @@ export const invocationAnalyticsTools: Tool[] = [
         return {
           success: true,
           room_id: targetRoomId || 'all_rooms',
+          bot_id: targetBotId || 'all_bots',
           days_analyzed: days,
           models: result.rows.map(row => ({
             provider: row.provider,

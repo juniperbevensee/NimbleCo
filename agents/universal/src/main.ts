@@ -287,6 +287,13 @@ ${task.context ? `Context:\n${JSON.stringify(task.context, null, 2)}\n` : ''}${s
 AVAILABLE TOOLS:
 ${toolDescriptions}
 
+⚠️ DATA PROCESSING BEST PRACTICES:
+- read_workspace_file is LIMITED to 50 items max for large files (>100KB)
+- DO NOT use read_workspace_file with large limits to get full data - it will be capped and you'll waste tokens
+- FOR DATA PROCESSING (counting, filtering, aggregating): Use execute_javascript with fs.readFileSync() instead
+- Example: const data = JSON.parse(fs.readFileSync('/path/to/file.json', 'utf-8')); const result = data.filter(x => x.count > 5);
+- This processes data LOCALLY without sending it to the LLM, saving tokens and avoiding rate limits
+
 CRITICAL TOOL USAGE RULES:
 When you need to call a tool, respond with PURE JSON - NO TEXT BEFORE OR AFTER.
 
@@ -403,7 +410,34 @@ FORMAT RULES:
         }
       }
 
-      // No tool call - this is the final answer
+      // No tool call found - check if response indicates incomplete work
+      const incompleteIndicators = [
+        /let me (try|search|fetch|find|look|check|get|retrieve)/i,
+        /i'll (try|search|fetch|find|look|check|get|retrieve)/i,
+        /i will (try|search|fetch|find|look|check|get|retrieve)/i,
+        /searching for/i,
+        /fetching/i,
+      ];
+
+      const seemsIncomplete = incompleteIndicators.some(pattern => pattern.test(response.content));
+
+      if (seemsIncomplete) {
+        console.log(`  ⚠️ Response indicates pending action but no tool call found`);
+        messages.push({
+          role: 'assistant',
+          content: response.content
+        }, {
+          role: 'user',
+          content: `You indicated you would take an action, but didn't provide a tool call. Either:
+1. Make a tool call using pure JSON format: {"tool": "tool_name", "input": {...}}
+2. Or provide your final answer in natural language.
+
+Do not say what you will do - either do it (tool call) or provide the answer.`
+        });
+        continue;
+      }
+
+      // This is the final answer
       result = response.content;
       break;
     }

@@ -59,3 +59,15 @@ workspace/
 
 # Claude Code local settings
 .claude/
+
+# Additional tools (allow structure/docs, ignore user folders)
+additional-tools/*
+!additional-tools/README.md
+!additional-tools/tsconfig.json
+!additional-tools/.gitkeep
+!additional-tools/example/
+# Ignore compiled files in example
+additional-tools/example/*.js
+additional-tools/example/*.js.map
+additional-tools/example/*.d.ts
+additional-tools/example/*.d.ts.map

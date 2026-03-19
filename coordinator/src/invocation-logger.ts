@@ -29,6 +29,7 @@ export interface InvocationContext {
   triggerEventId?: string;
   inputMessage: string;
   taskType: string;
+  botId?: string;  // Which bot is handling this invocation
 }
 
 export class InvocationLogger {
@@ -48,13 +49,13 @@ export class InvocationLogger {
     // Get or create conversation
     const convResult = await db.query(
       `
-      INSERT INTO conversations (room_id, platform, user_id, title)
-      VALUES ($1, 'matrix', $2, $3)
+      INSERT INTO conversations (room_id, platform, user_id, title, bot_id)
+      VALUES ($1, 'matrix', $2, $3, $4)
       ON CONFLICT (room_id, platform)
-      DO UPDATE SET updated_at = NOW()
+      DO UPDATE SET updated_at = NOW(), bot_id = EXCLUDED.bot_id
       RETURNING id
       `,
-      [context.conversationId, context.triggerUserId, `Conversation in ${context.conversationId.substring(0, 20)}`]
+      [context.conversationId, context.triggerUserId, `Conversation in ${context.conversationId.substring(0, 20)}`, context.botId]
     );
 
     const conversationId = convResult.rows[0]?.id || (
@@ -74,13 +75,14 @@ export class InvocationLogger {
         trigger_event_id,
         input_message,
         task_type,
+        bot_id,
         status,
         started_at
       )
-      VALUES ($1, $2, $3, $4, $5, 'running', NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, 'running', NOW())
       RETURNING id
       `,
-      [conversationId, context.triggerUserId, context.triggerEventId, context.inputMessage, context.taskType]
+      [conversationId, context.triggerUserId, context.triggerEventId, context.inputMessage, context.taskType, context.botId]
     );
 
     this.invocationId = result.rows[0].id;

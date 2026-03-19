@@ -323,11 +323,13 @@ export class AnthropicAdapter extends LLMAdapter {
 
     const price = pricing[model] || pricing['claude-sonnet-3-5-20241022'];
 
-    // Regular input tokens (not cached)
-    const regularInputTokens = inputTokens - cacheCreationTokens - cacheReadTokens;
-
+    // Note: Anthropic's API already excludes cached tokens from inputTokens
+    // inputTokens = regular non-cached input only
+    // cacheCreationTokens = tokens written to cache
+    // cacheReadTokens = tokens read from cache
+    // So we just sum them up with their respective prices (no subtraction needed!)
     const cost =
-      (regularInputTokens * price.input +
+      (inputTokens * price.input +
        cacheCreationTokens * price.cacheWrite +
        cacheReadTokens * price.cacheRead +
        outputTokens * price.output) / 1_000_000;
@@ -990,12 +992,13 @@ export class LLMRouter {
     };
 
     // For ALL tasks, try cloud providers first (they're faster and more reliable)
-    // Priority: Bedrock > Vertex > Google AI > Anthropic
+    // Priority: Bedrock > Anthropic > Vertex > Google AI > Ollama
+    // Bedrock and Anthropic (both Claude) are much better at multi-step tool use
     if (this.dailyCost < this.dailyLimit) {
       tryAddAdapter('bedrock');
+      tryAddAdapter('anthropic');
       tryAddAdapter('vertex');
       tryAddAdapter('google-ai');
-      tryAddAdapter('anthropic');
     }
 
     // Add local Ollama models as final fallback

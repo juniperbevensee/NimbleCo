@@ -81,8 +81,12 @@ class Coordinator {
   private messageBusLogger?: MessageBusLogger;
   private processedTasks: Set<string> = new Set();
   private publishedMessages: Set<string> = new Set(); // Track published messages to prevent duplicates
+  private botId: string;
 
   constructor() {
+    // Get bot ID from environment (defaults to 'default' for single-bot setups)
+    this.botId = process.env.BOT_ID || 'default';
+
     // Initialize LLM router with cost limit
     const dailyLimit = parseFloat(process.env.LLM_DAILY_COST_LIMIT || '10');
     this.llmRouter = new LLMRouter(dailyLimit);
@@ -168,6 +172,7 @@ class Coordinator {
     });
 
     console.log('🚀 Coordinator started');
+    console.log(`🤖 Bot ID: ${this.botId}`);
     console.log(`📡 Connected to NATS: ${this.nc.getServer()}`);
 
     // Start message bus logger
@@ -362,6 +367,7 @@ class Coordinator {
       triggerEventId: task.payload?.matrix_event || undefined,
       inputMessage: description,
       taskType: task.type,
+      botId: this.botId,
     });
 
     // Reset failed adapters cache for this new invocation

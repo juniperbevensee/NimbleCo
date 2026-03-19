@@ -7,11 +7,12 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Tool, ToolContext } from '../base';
+import { getFileStorageRoot } from '../workspace-helper';
 
 // Local fallback storage when S3 is not configured
 // Computed at runtime to ensure dotenv has loaded
 function getLocalStorageRoot(): string {
-  return process.env.FILE_STORAGE_PATH || path.resolve(process.cwd(), 'storage/files');
+  return getFileStorageRoot();
 }
 
 /**

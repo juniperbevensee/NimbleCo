@@ -7,12 +7,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Tool, ToolContext } from '../base';
-
-// Workspace root - configurable via environment
-// Computed at runtime to ensure dotenv has loaded
-function getWorkspaceRoot(): string {
-  return process.env.WORKSPACE_PATH || path.resolve(process.cwd(), 'storage/workspace');
-}
+import { getWorkspaceRoot, getFileStorageRoot } from '../workspace-helper';
 
 interface LargeResultOptions {
   filenamePrefix?: string;
@@ -357,8 +352,8 @@ export const moveWorkspaceFileToStorage: Tool = {
   async handler(input: { workspace_file: string; storage_folder?: string; new_filename?: string; operation?: 'move' | 'copy' }, ctx: ToolContext) {
     const { workspace_file, storage_folder, new_filename, operation = 'move' } = input;
 
-    // Import storage root from files.ts
-    const LOCAL_STORAGE_ROOT = process.env.FILE_STORAGE_PATH || path.resolve(process.cwd(), 'storage/files');
+    // Get bot-isolated storage root
+    const LOCAL_STORAGE_ROOT = getFileStorageRoot();
 
     // Resolve source path in workspace
     const sourcePath = path.isAbsolute(workspace_file)

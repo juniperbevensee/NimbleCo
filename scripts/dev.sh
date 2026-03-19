@@ -94,12 +94,15 @@ done
 echo "📊 Starting dashboard..."
 cd "$PROJECT_ROOT/dashboard" && node dist/server.js > "$PROJECT_ROOT/logs/dashboard-server.log" 2>&1 &
 BG_PIDS="$BG_PIDS $!"
-echo "   Dashboard server PID: $!"
+echo "   Dashboard API server PID: $!"
+echo "   Dashboard API: http://localhost:3001"
 
 # Start dashboard UI in background
 cd "$PROJECT_ROOT/dashboard" && npm run dev > "$PROJECT_ROOT/logs/dashboard-ui.log" 2>&1 &
 BG_PIDS="$BG_PIDS $!"
 echo "   Dashboard UI PID: $!"
+echo "   Dashboard UI: http://localhost:5173"
+echo ""
 
 # Start coordinator in foreground
 echo "🎯 Starting coordinator..."

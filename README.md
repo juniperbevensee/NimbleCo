@@ -71,12 +71,14 @@ The setup script will configure LLM providers, integrations, and generate your `
 ### Daily Development
 
 ```bash
-npm start          # Start everything
-npm run restart    # After code or .env changes
+npm start          # Start everything with PM2
+npm run status     # Check running bots
+npm run logs       # View logs from all bots
+npm restart        # Restart all bots
 npm stop           # Stop everything
 ```
 
-That's it. `npm start` handles Docker, migrations, builds, and runs the coordinator.
+`npm start` uses PM2 to automatically discover and start all bot configurations. For local development without PM2, use `npm run dev` instead.
 
 ### Joining an Existing Mattermost Server
 
@@ -85,6 +87,112 @@ If connecting to a shared Mattermost (e.g., `mattermost.nimbleco.ai`), contact a
 2. Your user ID if you need admin privileges
 
 Enter these when running `npm run setup`.
+
+## Multi-Bot Deployment
+
+NimbleCo supports running multiple bot instances with different personas, tool configurations, and team memberships from a single deployment.
+
+### Quick Multi-Bot Setup
+
+**Interactive wizard:**
+```bash
+npm run setup:bot
+```
+
+Follow the prompts to configure each bot's Mattermost connection, identity, and tool access.
+
+**Manual setup (TL;DR):**
+```bash
+# Copy your existing .env
+cp .env .env.personal
+
+# Add BOT_ID to the file
+echo "BOT_ID=personal" >> .env.personal
+
+# (Optional) Set unique workspace for isolation
+echo "WORKSPACE_ROOT=./storage/workspace-personal" >> .env.personal
+
+# Start all bots (PM2 auto-discovers all .env.* files)
+npm start
+```
+
+That's it! PM2 will automatically find all `.env.*` files and start a coordinator process for each bot. **Note:** If you don't set `WORKSPACE_ROOT`, it will automatically default to `storage/workspace-<BOT_ID>` for isolation.
+
+### Multiple Bots Example
+
+```bash
+# Create three different bots
+cp .env .env.personal
+echo "BOT_ID=personal" >> .env.personal
+
+cp .env .env.osint
+echo "BOT_ID=osint" >> .env.osint
+# Edit .env.osint to enable OSINT tools, use different team, etc.
+
+cp .env .env.cryptid
+echo "BOT_ID=cryptid" >> .env.cryptid
+# Edit .env.cryptid to enable crypto tools, use different team, etc.
+
+# Start all three
+npm start
+
+# Monitor them
+npm run status
+pm2 logs nimble-personal
+```
+
+### Key Features
+
+- **Isolated identities** - Each bot has its own persona file (`storage/identity-<bot>.md`)
+- **Tool categories** - Enable/disable tool sets per bot (OSINT, crypto, etc.)
+- **Team separation** - Each bot can join different Mattermost teams
+- **Unified dashboard** - All bots visible in one dashboard with filtering
+- **Shared infrastructure** - All bots share database, NATS, and agent workers
+
+### Custom/Private Tools (Recommended)
+
+For OSINT, cryptocurrency, or other sensitive tools, use the **gitignored `additional-tools/` directory**:
+
+```bash
+# Create your custom tool categories
+mkdir -p additional-tools/osint
+mkdir -p additional-tools/cryptids
+mkdir -p additional-tools/personal
+
+# Write your tools in TypeScript
+cat > additional-tools/osint/index.ts <<EOF
+import { Tool } from '../../shared/tools/src/base';
+
+export const osintTools: Tool[] = [
+  {
+    name: 'my_osint_tool',
+    description: 'My private OSINT capability',
+    category: 'osint',
+    // ... tool implementation
+  },
+];
+EOF
+
+# Build your custom tools
+npx tsc -p additional-tools/tsconfig.json
+
+# Enable in specific bots
+echo "ADDITIONAL_TOOLS=osint" >> .env.osint
+echo "ADDITIONAL_TOOLS=cryptids,personal" >> .env.cryptid
+
+# Start bots
+npm start
+```
+
+**Benefits:**
+- ✅ No merge conflicts (gitignored folder)
+- ✅ Stay on main repo (no fork needed)
+- ✅ Per-bot tool loading (each bot loads only what it needs)
+- ✅ Full TypeScript support with IntelliSense
+
+**See [additional-tools/README.md](./additional-tools/README.md) for complete guide with examples.**
+
+**Alternative:** For more complex scenarios, you can maintain a private fork. See [MULTI-BOT.md](./MULTI-BOT.md) for complete multi-bot guide and [PRIVATE-FORK-GUIDE.md](./PRIVATE-FORK-GUIDE.md) for fork maintenance.
 
 ## Project Structure
 

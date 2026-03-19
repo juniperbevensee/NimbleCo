@@ -104,7 +104,7 @@ function Dashboard() {
           <LineChart data={stats}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis />
+            <YAxis domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]} />
             <Tooltip />
             <Legend />
             <Line
@@ -135,7 +135,7 @@ function Dashboard() {
           <LineChart data={stats}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis />
+            <YAxis domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2 * 100) / 100]} />
             <Tooltip />
             <Legend />
             <Line

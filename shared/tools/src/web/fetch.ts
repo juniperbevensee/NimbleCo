@@ -14,16 +14,63 @@ async function fetchWebContent(url: string, maxLength: number = 10000): Promise<
 
     // Block localhost, private IPs, and metadata endpoints (SSRF protection)
     const blockedHosts = [
+      // Localhost variants
       'localhost',
+      'localhost.localdomain',
       '127.0.0.1',
       '0.0.0.0',
-      '169.254.169.254', // AWS metadata
+      '0x7f000001', // Hex localhost
+      '2130706433', // Decimal localhost
+      '127.1',
       '::1',
+      '0:0:0:0:0:0:0:1',
+      // Cloud metadata endpoints
+      '169.254.169.254', // AWS metadata
+      'metadata.google.internal', // GCP metadata
+      '169.254.169.253', // Azure metadata (old)
+      '168.63.129.16', // Azure metadata (new)
+      // Link-local addresses
+      'fe80::',
     ];
 
     const host = parsedUrl.hostname.toLowerCase();
 
-    if (blockedHosts.includes(host) || host.startsWith('192.168.') || host.startsWith('10.') || host.startsWith('172.')) {
+    // Check blocked hosts (exact match)
+    if (blockedHosts.includes(host)) {
+      throw new Error('Access to internal/private networks is blocked for security');
+    }
+
+    // Check private IP ranges (IPv4)
+    if (
+      host.startsWith('192.168.') ||
+      host.startsWith('10.') ||
+      host.startsWith('172.16.') ||
+      host.startsWith('172.17.') ||
+      host.startsWith('172.18.') ||
+      host.startsWith('172.19.') ||
+      host.startsWith('172.20.') ||
+      host.startsWith('172.21.') ||
+      host.startsWith('172.22.') ||
+      host.startsWith('172.23.') ||
+      host.startsWith('172.24.') ||
+      host.startsWith('172.25.') ||
+      host.startsWith('172.26.') ||
+      host.startsWith('172.27.') ||
+      host.startsWith('172.28.') ||
+      host.startsWith('172.29.') ||
+      host.startsWith('172.30.') ||
+      host.startsWith('172.31.')
+    ) {
+      throw new Error('Access to internal/private networks is blocked for security');
+    }
+
+    // Check private IP ranges (IPv6)
+    if (
+      host.startsWith('fc00:') || // Unique local addresses
+      host.startsWith('fd00:') ||
+      host.startsWith('fe80:') || // Link-local
+      host.startsWith('ff00:') // Multicast
+    ) {
       throw new Error('Access to internal/private networks is blocked for security');
     }
 
@@ -39,6 +86,41 @@ async function fetchWebContent(url: string, maxLength: number = 10000): Promise<
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // Validate final URL after redirects (prevent redirect-based SSRF)
+    const finalUrl = new URL(response.url);
+    const finalHost = finalUrl.hostname.toLowerCase();
+
+    if (blockedHosts.includes(finalHost)) {
+      throw new Error('Redirect to internal/private networks is blocked for security');
+    }
+
+    if (
+      finalHost.startsWith('192.168.') ||
+      finalHost.startsWith('10.') ||
+      finalHost.startsWith('172.16.') ||
+      finalHost.startsWith('172.17.') ||
+      finalHost.startsWith('172.18.') ||
+      finalHost.startsWith('172.19.') ||
+      finalHost.startsWith('172.20.') ||
+      finalHost.startsWith('172.21.') ||
+      finalHost.startsWith('172.22.') ||
+      finalHost.startsWith('172.23.') ||
+      finalHost.startsWith('172.24.') ||
+      finalHost.startsWith('172.25.') ||
+      finalHost.startsWith('172.26.') ||
+      finalHost.startsWith('172.27.') ||
+      finalHost.startsWith('172.28.') ||
+      finalHost.startsWith('172.29.') ||
+      finalHost.startsWith('172.30.') ||
+      finalHost.startsWith('172.31.') ||
+      finalHost.startsWith('fc00:') ||
+      finalHost.startsWith('fd00:') ||
+      finalHost.startsWith('fe80:') ||
+      finalHost.startsWith('ff00:')
+    ) {
+      throw new Error('Redirect to internal/private networks is blocked for security');
     }
 
     const contentType = response.headers.get('content-type') || '';

@@ -29,7 +29,7 @@ import { interAgentTools } from './messaging/inter-agent';
 // Global registry
 export const registry = new ToolRegistry();
 
-// Register all tools
+// Register all core tools
 [
   ...attioTools,
   ...jitsiTools,
@@ -54,6 +54,113 @@ export const registry = new ToolRegistry();
   ...interAgentTools,
 ].forEach(tool => {
   registry.register(tool);
+});
+
+/**
+ * Load additional tools from gitignored additional-tools/ directory
+ *
+ * Usage:
+ * 1. Create additional-tools/{category}/index.ts
+ * 2. Export an array of Tool objects
+ * 3. Set ADDITIONAL_TOOLS=category1,category2 in .env
+ *
+ * Example structure:
+ *   additional-tools/
+ *   ├── osint/
+ *   │   └── index.ts       // export const osintTools: Tool[] = [...]
+ *   ├── cryptids/
+ *   │   └── index.ts
+ *   └── personal/
+ *       └── index.ts
+ */
+async function loadAdditionalTools(): Promise<void> {
+  const additionalToolsEnv = process.env.ADDITIONAL_TOOLS;
+
+  if (!additionalToolsEnv) {
+    return; // No additional tools configured
+  }
+
+  const categories = additionalToolsEnv.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (categories.length === 0) {
+    return;
+  }
+
+  console.log(`📦 Loading additional tools: ${categories.join(', ')}`);
+
+  const path = await import('path');
+  const fs = await import('fs');
+
+  // Get absolute path to additional-tools directory (3 levels up from dist)
+  const additionalToolsDir = path.resolve(__dirname, '../../../additional-tools');
+
+  // Check if directory exists
+  if (!fs.existsSync(additionalToolsDir)) {
+    console.warn('⚠️  ADDITIONAL_TOOLS set but directory not found:', additionalToolsDir);
+    console.warn('   Create it with: mkdir -p additional-tools/{osint,cryptids,personal}');
+    return;
+  }
+
+  for (const category of categories) {
+    const categoryPath = path.join(additionalToolsDir, category, 'index.js');
+
+    try {
+      // Check if the file exists
+      if (!fs.existsSync(categoryPath)) {
+        console.warn(`⚠️  Additional tools not found: ${category} (expected: ${categoryPath})`);
+        continue;
+      }
+
+      // Dynamically import the tools
+      const module = await import(categoryPath);
+
+      // Look for exported tool arrays
+      // Convention: export const {category}Tools: Tool[] = [...]
+      // Also accept: export default [...], export const tools = [...]
+      const toolArrays: Tool[][] = [];
+
+      if (Array.isArray(module.default)) {
+        toolArrays.push(module.default);
+      }
+
+      // Try common naming patterns
+      const possibleExports = [
+        `${category}Tools`,
+        'tools',
+        'additionalTools',
+      ];
+
+      for (const exportName of possibleExports) {
+        if (module[exportName] && Array.isArray(module[exportName])) {
+          toolArrays.push(module[exportName]);
+        }
+      }
+
+      if (toolArrays.length === 0) {
+        console.warn(`⚠️  No tool arrays found in ${category}/index.js`);
+        console.warn(`   Expected: export const ${category}Tools: Tool[] = [...]`);
+        continue;
+      }
+
+      // Register all tools
+      let registeredCount = 0;
+      for (const tools of toolArrays) {
+        for (const tool of tools) {
+          registry.register(tool);
+          registeredCount++;
+        }
+      }
+
+      console.log(`   ✅ Loaded ${registeredCount} tool(s) from ${category}`);
+    } catch (error: any) {
+      console.error(`❌ Failed to load additional tools from ${category}:`, error.message);
+    }
+  }
+}
+
+// Load additional tools on startup (async, won't block)
+loadAdditionalTools().catch(err => {
+  console.error('❌ Error loading additional tools:', err);
 });
 
 // Tool selection strategies

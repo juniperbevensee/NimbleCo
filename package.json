@@ -10,10 +10,14 @@
     "dashboard"
   ],
   "scripts": {
-    "start": "./scripts/dev.sh",
-    "restart": "./scripts/restart.sh",
-    "stop": "./scripts/stop.sh",
+    "dev": "./scripts/dev.sh",
+    "start": "pm2 start pm2.config.js",
+    "restart": "pm2 restart pm2.config.js",
+    "stop": "pm2 stop pm2.config.js",
+    "logs": "pm2 logs",
+    "status": "pm2 list",
     "setup": "./setup.sh",
+    "setup:bot": "node bin/setup-bot.js",
     "build": "npm run build --workspaces",
     "clean": "npm run clean --workspaces && rm -rf node_modules",
     "dev:docker": "docker-compose up",

@@ -12,14 +12,24 @@
   "dependencies": {
     "@notionhq/client": "^2.2.15",
     "@octokit/rest": "^20.0.2",
+    "chartjs-node-canvas": "^5.0.0",
     "ical-generator": "^7.0.0",
+    "isolated-vm": "^6.1.2",
+    "js-yaml": "^4.1.1",
+    "natural": "^8.1.1",
     "open-measures": "github:juniperbevensee/open-measures-ts",
+    "papaparse": "^5.5.3",
     "pg": "^8.20.0",
+    "sentiment": "^5.0.2",
+    "simple-statistics": "^7.8.9",
+    "xlsx": "^0.18.5",
     "zod": "^3.22.4",
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
+    "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.18.0",
     "typescript": "^5.3.0"
   }
