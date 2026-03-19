@@ -11,8 +11,8 @@
   ],
   "scripts": {
     "dev": "./scripts/dev.sh",
-    "start": "pm2 start pm2.config.js",
-    "restart": "pm2 restart pm2.config.js",
+    "start": "pm2 start pm2.config.js && pm2 logs",
+    "restart": "pm2 restart pm2.config.js && pm2 logs",
     "stop": "pm2 stop pm2.config.js",
     "logs": "pm2 logs",
     "status": "pm2 list",

@@ -41,6 +41,9 @@ data/
 *-key.json
 service-account*.json
 
+# Personal setup answers (keep base SETUP-ANSWERS.txt tracked)
+SETUP-ANSWERS-*.txt
+
 # Docker
 docker-compose.override.yml
 

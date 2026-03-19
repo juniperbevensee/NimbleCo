@@ -71,6 +71,7 @@ apps.push({
   name: 'nimble-dashboard',
   script: './dashboard/dist/server.js',
   cwd: rootDir,
+  exec_mode: 'fork',  // Use fork mode, not cluster (avoids port conflicts)
   instances: 1,
   autorestart: true,
   watch: false,

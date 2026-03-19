@@ -1,0 +1,313 @@
+NimbleCo Setup Answer Guide
+===========================
+
+This file contains answers to all questions asked during the setup process.
+Use this as a reference when running ./setup.sh or npm run setup-bot
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MAIN SETUP (./setup.sh)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DEPENDENCY INSTALLATION
+-----------------------
+Install Homebrew now? (macOS only)
+→ y (if you don't have it and want automated setup)
+
+Install Node.js via [package manager]?
+→ y (if not already installed)
+
+Upgrade Node.js via [package manager]?
+→ y (if version < 18)
+
+Install Docker Desktop via Homebrew? (macOS)
+→ y (required for infrastructure)
+
+Install Docker via [package manager]? (Linux)
+→ y (required for infrastructure)
+
+Install Ollama for local LLM support?
+→ y (recommended for free local LLMs)
+
+
+LLM CONFIGURATION
+-----------------
+Use Ollama for local LLM? (FREE, recommended) [default: y]
+→ y
+
+Install Qwen 3.5 (9B, latest best small model with 256K context)?
+→ y
+
+Install Qwen 2.5 Coder (32B, best for code)?
+→ y
+
+Use Anthropic Claude? (Paid, best quality) [default: n]
+→ y (if you have an API key)
+
+Anthropic API key:
+→ [YOUR_ANTHROPIC_API_KEY_HERE]
+
+Use Google AI / Gemini? (Free tier available) [default: n]
+→ n (or y if you want to use Google AI)
+
+Google AI API key:
+→ [YOUR_GOOGLE_AI_API_KEY_HERE]
+
+Use Google Vertex AI? ($300 free credits) [default: n]
+→ n (or y if you have GCP setup)
+
+GCP Project ID:
+→ [YOUR_GCP_PROJECT_ID]
+
+GCP Region [default: us-central1]:
+→ us-central1
+
+Use AWS Bedrock? (Free tier available) [default: n]
+→ n (or y if you have AWS setup)
+
+AWS Region [default: us-east-1]:
+→ us-east-1
+
+Bedrock Model ID or ARN [default: anthropic.claude-sonnet-4-20250514-v1:0]:
+→ anthropic.claude-sonnet-4-20250514-v1:0
+
+AWS Bearer Token (optional):
+→ [YOUR_AWS_BEARER_TOKEN_HERE or leave blank]
+
+Daily LLM cost limit (USD) [default: 10.00]:
+→ 10.00
+
+
+MATTERMOST INTEGRATION
+----------------------
+Set up Mattermost integration? [default: n]
+→ y (if you want chat bot integration)
+
+Use local Mattermost server? [default: n]
+→ n (use hosted server for production)
+→ y (for local testing)
+
+Enter Mattermost server URL (if not local):
+→ https://mattermost.nimbleco.ai
+
+Mattermost bot token (get from admin):
+→ [YOUR_MATTERMOST_BOT_TOKEN_HERE or leave blank to configure later]
+
+Default channel [default: agent-tasks] (just press enter):
+→ 
+
+Configure admin users? [default: n]
+→ y (if you want to restrict certain features)
+
+Admin user IDs (comma-separated):
+→ [USER_ID_1,USER_ID_2,USER_ID_3]
+   (Find in Mattermost: Profile → Advanced → User ID)
+
+
+INTEGRATION TOOLS
+-----------------
+These are all optional but set admin features for this or other people can do actions on them!
+
+
+Set up GitHub integration? [default: y]
+→ y
+
+GitHub Personal Access Token:
+→ [YOUR_GITHUB_TOKEN_HERE]
+   Scopes needed: repo, workflow
+   Create at: https://github.com/settings/tokens
+
+Set up Attio CRM? [default: n]
+→ n (unless you use Attio CRM)
+
+Attio API key:
+→ [YOUR_ATTIO_API_KEY_HERE]
+   Get at: https://app.attio.com/settings/api
+
+Set up Notion? [default: n]
+→ n (unless you want Notion integration)
+
+Notion integration token:
+→ [YOUR_NOTION_INTEGRATION_TOKEN_HERE]
+   Create at: https://www.notion.so/my-integrations
+
+
+STORAGE CONFIGURATION
+---------------------
+Use MinIO for S3-compatible storage? [default: n]
+→ n (local filesystem is fine for most use cases)
+
+If yes to MinIO:
+  MINIO_ENDPOINT: http://localhost:9000
+  MINIO_BUCKET: nimbleco
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+
+
+BUILD AND START
+---------------
+Launch admin dashboard? [default: y]
+→ y
+
+Install npm dependencies? [default: y]
+→ y
+
+Build TypeScript packages? [default: y]
+→ y
+
+Start Docker infrastructure (NATS, PostgreSQL, etc.)? [default: y]
+→ y
+
+Run tests to verify setup? [default: y]
+→ y
+
+Start coordinator and agents with PM2? [default: y]
+→ y
+
+Then you will probably want to enter:
+
+pm2 logs (this will show the listener, npm start/restart do this automatically)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MULTI-BOT SETUP (npm run setup-bot)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BOT IDENTITY
+------------
+Bot ID (e.g., "personal", "osint", "cryptid"):
+→ [your-bot-name]
+   Use lowercase letters, numbers, hyphens, underscores only
+
+Clone from existing bot config?
+→ 0 (start fresh)
+→ [number] (clone from existing bot)
+
+
+MATTERMOST CONFIGURATION
+------------------------
+URL [required]:
+→ https://your-mattermost-server.com
+
+Bot Token [required]:
+→ [YOUR_BOT_TOKEN_HERE]
+   Create in: Mattermost → Integrations → Bot Accounts
+
+Team Name [optional]:
+→ [your-team-name or leave blank]
+
+
+STORAGE
+-------
+Workspace directory [default: ./storage/workspace-{botId}]:
+→ (press Enter to use default)
+
+
+TOOL CATEGORIES
+---------------
+Enable OSINT tools? [default: N]
+→ y (if this bot will do OSINT research)
+→ n (for general purpose bots)
+
+Enable crypto/blockchain tools? [default: N]
+→ y (if this bot will work with blockchain data)
+→ n (for general purpose bots)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUICK SETUP MODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For faster re-runs, use quick mode:
+  ./setup.sh --quick
+  ./setup.sh -q
+
+This will skip confirmations and use saved configuration from .setup-last-session
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RECOMMENDED MINIMAL SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For a basic working setup, you need:
+
+1. LLM Provider (at least one):
+   - Ollama (free, local) ✓ RECOMMENDED
+   - Anthropic Claude (paid, best quality)
+   - Google AI/Gemini (free tier available)
+
+2. Infrastructure (automated):
+   - Docker ✓ REQUIRED
+   - NATS ✓ REQUIRED
+   - PostgreSQL ✓ REQUIRED
+
+3. Integration (optional but useful):
+   - GitHub token (for code-related tasks)
+   - Mattermost (for chat bot interface)
+
+4. Minimal .env example:
+   NATS_URL=nats://localhost:4222
+   DATABASE_URL=postgresql://agent:change-this-password@localhost:5432/nimbleco
+   OLLAMA_URL=http://localhost:11434
+   LLM_MODEL_QUICK=qwen3.5:9b
+   LLM_MODEL_CODE=qwen2.5-coder:32b
+   LLM_DAILY_COST_LIMIT=10.00
+   GITHUB_TOKEN=[YOUR_TOKEN_HERE]
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+POST-SETUP VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After setup completes, verify everything is running:
+
+1. Check PM2 processes:
+   pm2 list
+
+2. View logs:
+   pm2 logs
+
+3. Check Docker containers:
+   docker ps
+
+4. Access monitoring:
+   - Dashboard: http://localhost:5173
+   - NATS: http://localhost:8222
+   - Mattermost (if local): http://localhost:8065
+
+5. Test the system:
+   npm run task:create -- --type pr-review --pr <github-pr-url>
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Port conflicts:
+  - NATS: 4222, 8222
+  - PostgreSQL: 5432
+  - Mattermost: 8065
+  - Dashboard: 5173
+
+If setup fails:
+  1. Check Docker is running: docker info
+  2. Check logs: docker logs nimble-nats
+  3. Check logs: docker logs nimble-postgres
+  4. Re-run with fresh start: ./setup.sh
+
+Reset everything:
+  docker-compose down -v
+  pm2 delete all
+  rm -rf node_modules package-lock.json
+  ./setup.sh
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Values marked [YOUR_*_HERE] need to be filled in by you
+- Values in [brackets] show defaults or examples
+- → indicates the recommended answer
+- Setup creates .setup-last-session for quick re-runs
+- All configuration is stored in .env file
+- Multi-bot configs are stored in .env.{bot-id} files
