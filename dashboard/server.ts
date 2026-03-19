@@ -23,6 +23,9 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from the built frontend
+app.use(express.static(path.join(__dirname, '../dist')));
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -454,8 +457,15 @@ app.get('/api/rate-limits/stats', async (req, res) => {
   }
 });
 
+// Serve index.html for all other routes (client-side routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
 app.listen(port, () => {
-  console.log(`Dashboard API server running on http://localhost:${port}`);
+  console.log(`Dashboard server running on http://localhost:${port}`);
+  console.log(`Frontend: http://localhost:${port}`);
+  console.log(`API: http://localhost:${port}/api/*`);
   console.log(`Database: ${process.env.DATABASE_URL?.replace(/:[^:@]+@/, ':****@') || 'Not configured'}`);
 });
 

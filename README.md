@@ -439,13 +439,13 @@ NimbleCo includes a modern admin dashboard for monitoring system health, invocat
 - **Tool & LLM Usage** - Call counts, success rates, token consumption
 
 **Access:**
-- URL: http://localhost:5173
+- URL: http://localhost:3001
 - API Server: http://localhost:3001
 - Configuration: `DASHBOARD_ENABLED=true` in `.env`
 
 **Architecture:**
 ```
-Dashboard (React + Vite) :5173
+Dashboard (React + Vite) :3001
        ↓ /api proxy
 Dashboard API Server (Express) :3001
        ↓

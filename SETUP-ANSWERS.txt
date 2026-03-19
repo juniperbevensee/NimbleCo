@@ -307,7 +307,7 @@ After setup completes, verify everything is running:
    docker ps
 
 4. Access monitoring:
-   - Dashboard: http://localhost:5173
+   - Dashboard: http://localhost:3001
    - NATS: http://localhost:8222
    - Mattermost (if local): http://localhost:8065
 
@@ -323,7 +323,7 @@ Port conflicts:
   - NATS: 4222, 8222
   - PostgreSQL: 5432
   - Mattermost: 8065
-  - Dashboard: 5173
+  - Dashboard: 3001
 
 If setup fails:
   1. Check Docker is running: docker info
