@@ -18,7 +18,7 @@
     "status": "pm2 list",
     "setup": "./setup.sh",
     "setup:bot": "node bin/setup-bot.js",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace=shared/llm-adapters --workspace=shared/tools && npm run build --workspace=coordinator --workspace=agents/universal --workspace=dashboard",
     "clean": "npm run clean --workspaces && rm -rf node_modules",
     "dev:docker": "docker-compose up",
     "dev:full": "docker-compose --profile full up",
