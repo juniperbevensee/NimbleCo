@@ -495,6 +495,7 @@ AGPL-3.0 License - see [LICENSE](./LICENSE)
 
 - [Egregore](https://egregore.xyz) - Shared context patterns
 - [Cantrip](https://github.com/deepfates/cantrip) - Agent architecture patterns
+- [Upward Spiral](https://www.upward.earth/)
 - Claude Code - Terminal-native AI collaboration
 
 ## Support
