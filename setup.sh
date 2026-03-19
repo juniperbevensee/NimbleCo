@@ -420,22 +420,51 @@ elif ! docker info &> /dev/null 2>&1; then
     echo -e "${YELLOW}⚠${NC}  Docker installed but not running"
 
     if [ "$PLATFORM" = "macos" ]; then
-        echo -e "${BLUE}⏳${NC} Starting Docker Desktop..."
-        open -a Docker
+        # Check if Docker Desktop app exists
+        if [ -d "/Applications/Docker.app" ]; then
+            echo -e "${BLUE}⏳${NC} Starting Docker Desktop..."
+            open -a Docker
 
-        echo -e "${BLUE}⏳${NC} Waiting for Docker to be ready..."
-        for i in {1..60}; do
-            if docker info &> /dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC} Docker is ready"
-                break
+            echo -e "${BLUE}⏳${NC} Waiting for Docker to be ready..."
+            for i in {1..60}; do
+                if docker info &> /dev/null 2>&1; then
+                    echo -e "${GREEN}✓${NC} Docker is ready"
+                    break
+                fi
+                sleep 1
+            done
+
+            if ! docker info &> /dev/null 2>&1; then
+                echo -e "${RED}✗${NC} Docker failed to start in time"
+                echo -e "   Please start Docker Desktop manually and try again"
+                exit 1
             fi
-            sleep 1
-        done
+        else
+            # Docker CLI installed but not Docker Desktop
+            echo -e "${YELLOW}ℹ${NC}  Docker Desktop not found"
+            echo -e "   You have Docker CLI but need a Docker daemon running."
+            echo ""
+            echo -e "${BLUE}Options:${NC}"
+            echo -e "  1. Install Docker Desktop: ${YELLOW}brew install --cask docker${NC}"
+            echo -e "  2. Use Colima (lightweight): ${YELLOW}brew install colima && colima start${NC}"
+            echo -e "  3. Use OrbStack: ${YELLOW}brew install --cask orbstack${NC}"
+            echo ""
 
-        if ! docker info &> /dev/null 2>&1; then
-            echo -e "${RED}✗${NC} Docker failed to start in time"
-            echo -e "   Please start Docker Desktop manually and try again"
-            exit 1
+            if confirm "Have you started a Docker daemon? (colima, orbstack, etc.)" "n"; then
+                echo -e "${BLUE}⏳${NC} Checking Docker connection..."
+                sleep 2
+                if docker info &> /dev/null 2>&1; then
+                    echo -e "${GREEN}✓${NC} Docker is ready"
+                else
+                    echo -e "${RED}✗${NC} Docker daemon still not accessible"
+                    echo -e "   Please start your Docker daemon and run setup again"
+                    exit 1
+                fi
+            else
+                echo -e "${RED}✗${NC} Docker daemon required"
+                echo -e "   Please start Docker and run setup again"
+                exit 1
+            fi
         fi
     else
         echo -e "${BLUE}⏳${NC} Starting Docker..."

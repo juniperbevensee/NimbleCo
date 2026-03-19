@@ -25,6 +25,14 @@ Install Docker Desktop via Homebrew? (macOS)
 Install Docker via [package manager]? (Linux)
 → y (required for infrastructure)
 
+⚠️  If you have Docker CLI but not Docker Desktop:
+   The setup will detect this and offer alternatives:
+   - Install Docker Desktop: brew install --cask docker
+   - Use Colima (lightweight): brew install colima && colima start
+   - Use OrbStack: brew install --cask orbstack
+
+   After starting your Docker daemon, confirm when prompted.
+
 Install Ollama for local LLM support?
 → y (recommended for free local LLMs)
 
