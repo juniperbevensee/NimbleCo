@@ -192,7 +192,7 @@ npm start
 
 **See [additional-tools/README.md](./additional-tools/README.md) for complete guide with examples.**
 
-**Alternative:** For more complex scenarios, you can maintain a private fork. See [MULTI-BOT.md](./MULTI-BOT.md) for complete multi-bot guide and [PRIVATE-FORK-GUIDE.md](./PRIVATE-FORK-GUIDE.md) for fork maintenance.
+**Alternative:** For more complex scenarios, you can maintain a private fork. See [docs/MULTI-BOT.md](./docs/MULTI-BOT.md) for complete multi-bot guide.
 
 ## Project Structure
 
