@@ -16,6 +16,33 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Parse .env file into key-value object
+ */
+function parseEnvFile(filePath) {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const env = {};
+
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const match = trimmed.match(/^([^=]+)=(.*)$/);
+    if (match) {
+      const key = match[1].trim();
+      let value = match[2].trim();
+      // Remove quotes if present
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      env[key] = value;
+    }
+  }
+
+  return env;
+}
+
 // Find all .env.* files (excluding examples/templates)
 const rootDir = __dirname;
 const envFiles = fs.readdirSync(rootDir)
@@ -27,15 +54,67 @@ const envFiles = fs.readdirSync(rootDir)
 
 console.log(`📦 PM2 Config: Found ${envFiles.length} bot configuration(s)`);
 
-if (envFiles.length === 0) {
-  console.log('⚠️  No bot configurations found!');
-  console.log('   Create a .env.<bot-name> file or run: npm run setup');
-  console.log('   Example: .env.personal, .env.osint, .env.cryptid');
+// Check for bots without tokens and duplicate tokens
+const botsWithoutTokens = [];
+const tokenMap = new Map(); // token -> [bot1, bot2, ...]
+
+envFiles.forEach(file => {
+  const botName = file.replace('.env.', '');
+  const filePath = path.join(rootDir, file);
+  const env = parseEnvFile(filePath);
+
+  if (!env.MATTERMOST_BOT_TOKEN || env.MATTERMOST_BOT_TOKEN === '') {
+    botsWithoutTokens.push(botName);
+  } else {
+    const token = env.MATTERMOST_BOT_TOKEN;
+    if (!tokenMap.has(token)) {
+      tokenMap.set(token, []);
+    }
+    tokenMap.get(token).push(botName);
+  }
+});
+
+// Warn about bots without tokens
+if (botsWithoutTokens.length > 0) {
+  console.log(`\n⚠️  WARNING: ${botsWithoutTokens.length} bot(s) without MATTERMOST_BOT_TOKEN will be skipped:`);
+  botsWithoutTokens.forEach(bot => console.log(`   - ${bot}`));
+  console.log(`   Add MATTERMOST_BOT_TOKEN to .env.${botsWithoutTokens[0]} to enable`);
+}
+
+// Warn about duplicate tokens
+const duplicates = Array.from(tokenMap.entries())
+  .filter(([token, bots]) => bots.length > 1);
+
+if (duplicates.length > 0) {
+  console.log(`\n🚨 ERROR: Duplicate MATTERMOST_BOT_TOKEN detected!\n`);
+  duplicates.forEach(([token, bots]) => {
+    console.log(`   These bots share the same token:`);
+    bots.forEach(bot => console.log(`   - ${bot}`));
+    console.log(`   This will cause:`)
+    console.log(`   - WebSocket connection conflicts`);
+    console.log(`   - Messages delivered to random bots`);
+    console.log(`   - Database conflicts\n`);
+  });
+  console.log(`   ❌ FIX: Each bot needs a unique token from Mattermost System Console → Bot Accounts\n`);
   process.exit(1);
 }
 
-// Generate PM2 app config for each bot
-const apps = envFiles.map(envFile => {
+// Filter out bots without tokens
+const validEnvFiles = envFiles.filter(file => {
+  const botName = file.replace('.env.', '');
+  return !botsWithoutTokens.includes(botName);
+});
+
+if (validEnvFiles.length === 0) {
+  console.log(`\n❌ No valid bot configurations found!`);
+  console.log(`   All bots are missing MATTERMOST_BOT_TOKEN`);
+  console.log(`   Run: npm run setup:bot\n`);
+  process.exit(1);
+}
+
+// Generate PM2 app config for each valid bot
+console.log(`\n✅ Starting ${validEnvFiles.length} bot(s):`);
+const apps = validEnvFiles.map(envFile => {
   const botName = envFile.replace('.env.', '');
   console.log(`   - ${botName} (${envFile})`);
 

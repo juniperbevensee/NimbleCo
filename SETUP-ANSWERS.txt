@@ -202,15 +202,44 @@ Workspace directory [default: ./storage/workspace-{botId}]:
 → (press Enter to use default)
 
 
-TOOL CATEGORIES
+ADDITIONAL TOOLS
 ---------------
-Enable OSINT tools? [default: N]
-→ y (if this bot will do OSINT research)
-→ n (for general purpose bots)
+Load custom tools from additional-tools/ directory?
+ADDITIONAL_TOOLS [blank for none]:
+→ osint (for OSINT research tools)
+→ cryptids (for crypto/blockchain tools)
+→ osint,cryptids (for multiple categories)
+→ (leave blank for core tools only)
 
-Enable crypto/blockchain tools? [default: N]
-→ y (if this bot will work with blockchain data)
-→ n (for general purpose bots)
+Note: These load from gitignored additional-tools/{category}/ directories.
+See additional-tools/README.md for creating custom tools.
+
+
+ADMIN-ONLY TOOLS (Optional - Set in .env)
+------------------------------------------
+Restrict certain tools or categories to admins:
+
+# Restrict specific tools
+ADMIN_ONLY_TOOLS=create_github_issue,merge_pull_request,update_attio_person
+
+# Restrict entire categories
+ADMIN_ONLY_CATEGORIES=osint,crypto
+
+# Restrict additional-tools categories to admins
+# If you want "osint" tools available but admin-only:
+ADDITIONAL_TOOLS=osint
+ADMIN_ONLY_CATEGORIES=osint
+
+# Or restrict specific tools from additional-tools:
+ADMIN_ONLY_TOOLS=telegram_search,blockchain_lookup
+
+# Configure different LLM models per tier
+ADMIN_LLM_MODEL=claude-opus-4-5-20251101
+USER_LLM_MODEL=claude-sonnet-4-5-20250929
+
+# Restrict LLM providers per tier
+ADMIN_LLM_PROVIDERS=bedrock,anthropic,vertex
+USER_LLM_PROVIDERS=ollama,vertex
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

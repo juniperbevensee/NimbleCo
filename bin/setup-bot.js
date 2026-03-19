@@ -141,15 +141,14 @@ async function createBot() {
   const workspaceNew = await ask(`  Workspace directory [${workspaceDefault}]: `);
   newEnv.WORKSPACE_ROOT = workspaceNew || workspaceDefault;
 
-  // Tool enablement
-  console.log('\n━━━ Tool Categories ━━━');
-  console.log('Enable tool categories for this bot:');
-
-  const enableOsint = await ask('  Enable OSINT tools? [y/N]: ');
-  newEnv.ENABLE_OSINT_TOOLS = enableOsint.toLowerCase() === 'y' ? 'true' : 'false';
-
-  const enableCrypto = await ask('  Enable crypto/blockchain tools? [y/N]: ');
-  newEnv.ENABLE_CRYPTO_TOOLS = enableCrypto.toLowerCase() === 'y' ? 'true' : 'false';
+  // Additional tools configuration
+  console.log('\n━━━ Additional Tools ━━━');
+  console.log('Load custom tools from additional-tools/ directory?');
+  console.log('(e.g., "osint,cryptids" or leave blank for core tools only)');
+  const additionalTools = await ask('  ADDITIONAL_TOOLS [blank for none]: ');
+  if (additionalTools) {
+    newEnv.ADDITIONAL_TOOLS = additionalTools.trim();
+  }
 
   // Write config file
   writeEnvFile(envPath, newEnv);
@@ -211,8 +210,8 @@ async function listBots() {
     console.log(`    Team: ${env.MATTERMOST_TEAM_NAME || 'any'}`);
     console.log(`    Identity: ${env.IDENTITY_FILE || 'default'}`);
     console.log(`    Workspace: ${env.WORKSPACE_ROOT || './storage/workspace'}`);
-    console.log(`    OSINT tools: ${env.ENABLE_OSINT_TOOLS === 'true' ? 'enabled' : 'disabled'}`);
-    console.log(`    Crypto tools: ${env.ENABLE_CRYPTO_TOOLS === 'true' ? 'enabled' : 'disabled'}`);
+    console.log(`    Additional tools: ${env.ADDITIONAL_TOOLS || '(none)'}`);
+    console.log(`    Has token: ${env.MATTERMOST_BOT_TOKEN ? '✓' : '✗'}`);
     console.log('');
   });
 }
