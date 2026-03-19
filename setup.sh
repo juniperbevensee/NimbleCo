@@ -1057,6 +1057,35 @@ fi
 
 echo -e "${GREEN}✓${NC} Configuration written to .env"
 
+# Create default bot config for PM2
+if [ -n "$MATTERMOST_BOT_TOKEN" ]; then
+    # Only create bot config if Mattermost is configured
+    echo ""
+    echo -e "${BLUE}Creating default bot configuration...${NC}"
+
+    # Check if user wants to name their bot
+    read -p "Bot name (default: personal): " BOT_NAME
+    BOT_NAME=${BOT_NAME:-personal}
+
+    # Validate bot name
+    if [[ ! "$BOT_NAME" =~ ^[a-z0-9_-]+$ ]]; then
+        echo -e "${YELLOW}⚠${NC}  Invalid bot name. Using 'personal'"
+        BOT_NAME="personal"
+    fi
+
+    # Create bot-specific env file
+    cp .env .env.$BOT_NAME
+
+    # Add BOT_ID to bot config
+    echo "" >> .env.$BOT_NAME
+    echo "# Bot Identity" >> .env.$BOT_NAME
+    echo "BOT_ID=$BOT_NAME" >> .env.$BOT_NAME
+
+    echo -e "${GREEN}✓${NC} Bot configuration created: .env.$BOT_NAME"
+    echo -e "${YELLOW}ℹ${NC}  PM2 will start this bot when you run: ${GREEN}npm start${NC}"
+    echo -e "${YELLOW}ℹ${NC}  To create additional bots, run: ${GREEN}npm run setup:bot${NC}"
+fi
+
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  Installing Dependencies${NC}"

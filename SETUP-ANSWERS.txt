@@ -101,7 +101,7 @@ Mattermost bot token (get from admin):
 → [YOUR_MATTERMOST_BOT_TOKEN_HERE or leave blank to configure later]
 
 Default channel [default: agent-tasks] (just press enter):
-→ 
+→
 
 Configure admin users? [default: n]
 → y (if you want to restrict certain features)
@@ -109,6 +109,17 @@ Configure admin users? [default: n]
 Admin user IDs (comma-separated):
 → [USER_ID_1,USER_ID_2,USER_ID_3]
    (Find in Mattermost: Profile → Advanced → User ID)
+
+
+BOT IDENTITY
+------------
+Bot name (default: personal):
+→ personal (or any name like: osint, assistant, support, etc.)
+
+⚠️  IMPORTANT: This creates .env.{botname} which PM2 uses to start your bot.
+   The bot name must be lowercase letters, numbers, hyphens, or underscores.
+
+   Example: If you name it "personal", setup creates .env.personal with BOT_ID=personal
 
 
 INTEGRATION TOOLS
