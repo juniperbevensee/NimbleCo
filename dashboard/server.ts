@@ -171,8 +171,14 @@ app.post('/api/mattermost/users', async (req, res) => {
       return res.status(500).json({ error: 'Mattermost not configured' });
     }
 
-    // Fetch user info for each ID
-    const userInfoPromises = user_ids.map(async (userId: string) => {
+    // Filter out Matrix user IDs (format: @user:server.com) and other non-Mattermost IDs
+    // Mattermost user IDs are 26-character alphanumeric strings
+    const mattermostUserIds = user_ids.filter((id: string) => {
+      return typeof id === 'string' && !id.includes(':') && !id.includes('@');
+    });
+
+    // Fetch user info for each Mattermost ID
+    const userInfoPromises = mattermostUserIds.map(async (userId: string) => {
       try {
         const response = await fetch(`${mattermostUrl}/api/v4/users/${userId}`, {
           headers: {
@@ -206,6 +212,13 @@ app.post('/api/mattermost/users', async (req, res) => {
       acc[user.id] = user;
       return acc;
     }, {} as Record<string, any>);
+
+    // Add filtered-out IDs (Matrix, etc.) with null info
+    user_ids.forEach((id: string) => {
+      if (!userMap[id]) {
+        userMap[id] = { id, username: null, display_name: null };
+      }
+    });
 
     res.json(userMap);
   } catch (error) {
