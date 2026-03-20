@@ -251,6 +251,12 @@ export class UniversalAgent {
       if (!context.credentials.attio_token) unconfiguredTools.push('search_attio', 'create_attio_record', 'update_attio_record');
       if (!context.credentials.github_token) unconfiguredTools.push('github_list_repos', 'github_get_repo', 'github_create_issue', 'github_list_prs', 'github_get_pr');
 
+      // Filter out inter-agent messaging unless in a swarm
+      // This prevents agents from confusing Mattermost @mentions with inter-agent messaging
+      if (!task.swarm_roster) {
+        unconfiguredTools.push('send_message_to_agent');
+      }
+
       const beforeFilter = tools.length;
       tools = tools.filter(t => !unconfiguredTools.includes(t.name));
       const filtered = beforeFilter - tools.length;
@@ -296,19 +302,17 @@ ${toolDescriptions}
 
 🚨 MATTERMOST MESSAGING (if responding to Mattermost):
 
-ARCHITECTURE: You are called by the coordinator to GENERATE responses, not to SEND them.
+ARCHITECTURE: You generate responses, the coordinator posts them.
 1. User @mentions your bot in Mattermost
-2. Coordinator receives the message and calls YOU
+2. Coordinator calls YOU to generate a response
 3. You return your text response
-4. Coordinator automatically posts your response back to Mattermost
+4. Coordinator automatically posts it back to Mattermost
 
 This means:
 - Your text response IS the message (posted automatically)
-- You don't "send" - you're being called to generate a response
 - To @mention someone: Just write "@username" in your response (e.g., "Hi @bbb!")
-- DO NOT look for messaging tools for basic chat - JUST WRITE TEXT
+- DO NOT look for messaging tools - JUST WRITE TEXT
 - post_mattermost_message_with_attachment: ONLY for attaching files (charts, images)
-- send_message_to_agent: ONLY for backend swarm coordination, not Mattermost chat
 
 CRITICAL TOOL USAGE RULES:
 When you need to call a tool, respond with PURE JSON - NO TEXT BEFORE OR AFTER.

@@ -375,7 +375,12 @@ class Coordinator {
     console.log(`📊 Started invocation ${invocationId}`);
 
     // Get relevant tools for this task
-    const tools = getToolsForTask(description);
+    let tools = getToolsForTask(description);
+
+    // Filter out inter-agent messaging for coordinator (only for swarms)
+    // Prevents confusion between Mattermost @mentions and inter-agent messaging
+    tools = tools.filter(t => t.name !== 'send_message_to_agent');
+
     console.log(`🔧 Available tools: ${tools.map(t => t.name).join(', ')}`);
 
     // Build system prompt with identity document
@@ -453,21 +458,20 @@ WORKFLOW:
 
 ARCHITECTURE:
 1. Someone @mentions you in Mattermost
-2. The coordinator receives that message and calls YOU to generate a response
+2. I (the coordinator) call you to generate a response
 3. You return your text response
-4. The coordinator automatically posts your response back to Mattermost
+4. I automatically post your response back to Mattermost
 
 This means:
 - Your text response IS the message that gets posted to Mattermost
-- You don't "send" messages - you're being CALLED to generate a response that gets posted
+- You don't "send" messages - you're being CALLED to generate responses
 - To @mention someone: Just write "@username" in your response (e.g., "Hi @bbb!")
-- DO NOT look for a "post message" tool - JUST WRITE YOUR RESPONSE TEXT
-- The post_mattermost_message_with_attachment tool is ONLY for attaching files (images, charts, etc.)
-- The send_message_to_agent tool is ONLY for backend swarm coordination, NOT Mattermost chat
+- DO NOT look for messaging tools - JUST WRITE YOUR RESPONSE TEXT
+- The post_mattermost_message_with_attachment tool is ONLY for attaching files (images, charts)
 
 Example: User says "@audrey introduce yourself to @bbb"
-→ You simply write: "Hi @bbb! I'm Audrey, nice to meet you!"
-→ The coordinator posts your text to Mattermost automatically
+→ You write: "Hi @bbb! I'm Audrey, nice to meet you!"
+→ I post your text to Mattermost automatically
 
 OTHER IMPORTANT NOTES:
 - For data retrieval requests, call the appropriate tool immediately
