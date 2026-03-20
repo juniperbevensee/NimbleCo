@@ -18,13 +18,12 @@ export function setNatsConnection(nc: NatsConnection) {
 
 export const sendMessageToAgent: Tool = {
   name: 'send_message_to_agent',
-  description: 'Send a message to another agent in the swarm. Use this to communicate, ask questions, share insights, or coordinate with other agents.',
+  description: 'Send a backend message to another agent working on the SAME TASK in a swarm. ONLY for inter-agent coordination, NOT for Mattermost chat. To talk to other bots in Mattermost, just @mention them in your response text like "@botname hello".',
   use_cases: [
-    'Communicating with other agents in a swarm',
-    'Asking questions to other agents',
-    'Sharing information or insights',
-    'Coordinating multi-agent tasks',
-    'Conversational exchanges between agents',
+    'Backend coordination with agents in the same swarm task',
+    'Asking questions to co-workers on the same task',
+    'Sharing task-specific information between swarm members',
+    'NOT for Mattermost chat - use @mentions for that',
   ],
   category: 'communication',
   parameters: {

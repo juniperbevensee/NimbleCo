@@ -450,6 +450,8 @@ WORKFLOW:
    - Provide your final answer to the user
 
 IMPORTANT:
+- To talk to other bots in Mattermost, just @mention them in your response text (e.g., "@botname hello!")
+- The send_message_to_agent tool is ONLY for backend coordination with agents working on the SAME task in a swarm, NOT for Mattermost chat
 - For data retrieval requests, call the appropriate tool immediately
 - Don't ask for clarification unless absolutely necessary
 - Use tools multiple times if needed to complete the task

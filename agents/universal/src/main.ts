@@ -271,8 +271,8 @@ SWARM MEMBERS:
 You are part of a swarm with ${task.swarm_roster.length} other agent(s):
 ${task.swarm_roster.map(a => `- ${a.agent_id}: ${a.role}${a.description ? ` - ${a.description}` : ''}`).join('\n')}
 ${tools.length > 0 ? `
-You can communicate with other agents using the 'send_message_to_agent' tool.
-Use this to ask questions, share insights, or coordinate your work.` : `
+You can communicate with swarm members using the 'send_message_to_agent' tool.
+This is ONLY for backend coordination between agents working on the SAME TASK.` : `
 The conversation is managed for you - simply respond to what others have said.
 Your response will be shared with the other participants automatically.`}
 ${task.max_turns ? `The swarm will run for ${task.max_turns} conversational turns.` : ''}
