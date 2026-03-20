@@ -424,14 +424,28 @@ elif ! docker ps &> /dev/null 2>&1; then
         # Check for Colima specifically
         if command -v colima &> /dev/null && colima status 2>&1 | grep -q "colima is running"; then
             echo -e "${BLUE}ℹ${NC}  Colima is running but docker CLI can't connect"
-            echo -e "${BLUE}⏳${NC} Setting docker context to colima..."
-            docker context use colima &> /dev/null || true
-            sleep 1
+
+            # Find the Colima context name (could be 'colima', 'colima-default', etc.)
+            COLIMA_CONTEXT=$(docker context ls --format "{{.Name}}" 2>/dev/null | grep -i colima | head -1)
+
+            if [ -n "$COLIMA_CONTEXT" ]; then
+                echo -e "${BLUE}⏳${NC} Setting docker context to $COLIMA_CONTEXT..."
+                docker context use "$COLIMA_CONTEXT" &> /dev/null
+                sleep 1
+            else
+                # No context found, try setting DOCKER_HOST directly
+                echo -e "${BLUE}⏳${NC} Setting DOCKER_HOST for Colima..."
+                export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+            fi
+
             if docker ps &> /dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC} Docker is ready (using Colima context)"
+                echo -e "${GREEN}✓${NC} Docker is ready (using Colima)"
             else
                 echo -e "${RED}✗${NC} Still can't connect to Colima"
-                echo -e "   Try manually: ${YELLOW}docker context use colima${NC}"
+                echo -e "   Try manually:"
+                echo -e "   ${YELLOW}docker context ls${NC} (find colima context)"
+                echo -e "   ${YELLOW}docker context use colima${NC} (or colima-default)"
+                echo -e "   Or: ${YELLOW}export DOCKER_HOST=unix://\$HOME/.colima/default/docker.sock${NC}"
                 exit 1
             fi
         # Check if Docker Desktop app exists
