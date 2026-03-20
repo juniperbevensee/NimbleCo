@@ -1292,8 +1292,9 @@ if confirm "Start coordinator and agents with PM2?" "y"; then
         npm install -g pm2
     fi
 
-    # Create logs directory
+    # Create necessary directories
     mkdir -p ./logs
+    mkdir -p ./storage
 
     # Check for any existing PM2 processes
     EXISTING_PROCS=$(pm2 list 2>/dev/null | grep -E "online|stopped|errored|one-launch-status" | wc -l | tr -d ' ')
