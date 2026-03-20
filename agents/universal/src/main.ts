@@ -294,6 +294,12 @@ ${toolDescriptions}
 - Example: const data = JSON.parse(fs.readFileSync('/path/to/file.json', 'utf-8')); const result = data.filter(x => x.count > 5);
 - This processes data LOCALLY without sending it to the LLM, saving tokens and avoiding rate limits
 
+MATTERMOST @MENTIONS (if responding to Mattermost):
+- Your text responses are posted directly to Mattermost
+- To @mention someone: Just include "@username" in your response text (e.g., "Hi @bbb!")
+- Works for bots, humans, anyone - no special tool needed
+- @mentions are plain text, not tool calls
+
 CRITICAL TOOL USAGE RULES:
 When you need to call a tool, respond with PURE JSON - NO TEXT BEFORE OR AFTER.
 

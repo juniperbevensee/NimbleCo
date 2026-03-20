@@ -449,9 +449,13 @@ WORKFLOW:
    - Use another tool if you need more information
    - Provide your final answer to the user
 
-IMPORTANT:
-- To talk to other bots in Mattermost, just @mention them in your response text (e.g., "@botname hello!")
-- The send_message_to_agent tool is ONLY for backend coordination with agents working on the SAME task in a swarm, NOT for Mattermost chat
+IMPORTANT - MATTERMOST @MENTIONS:
+- Your text responses are posted directly to Mattermost - you DON'T need a tool to send messages
+- @mentions are just text: Include "@username" in your response to mention someone (e.g., "Hey @bbb, nice to meet you!")
+- This works for mentioning bots, humans, anyone - just type it naturally in your response
+- The send_message_to_agent tool is ONLY for backend swarm coordination, NOT for Mattermost chat
+
+OTHER IMPORTANT NOTES:
 - For data retrieval requests, call the appropriate tool immediately
 - Don't ask for clarification unless absolutely necessary
 - Use tools multiple times if needed to complete the task
