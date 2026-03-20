@@ -416,25 +416,39 @@ if ! command -v docker &> /dev/null; then
             echo -e "${RED}✗${NC} Please install Docker: https://docs.docker.com/engine/install/"
         fi
     fi
-elif ! docker info &> /dev/null 2>&1; then
-    echo -e "${YELLOW}⚠${NC}  Docker installed but not running"
+elif ! docker ps &> /dev/null 2>&1; then
+    # Try lighter check - docker ps works with Colima/OrbStack even when docker info doesn't
+    echo -e "${YELLOW}⚠${NC}  Docker installed but daemon not accessible"
 
     if [ "$PLATFORM" = "macos" ]; then
+        # Check for Colima specifically
+        if command -v colima &> /dev/null && colima status 2>&1 | grep -q "colima is running"; then
+            echo -e "${BLUE}ℹ${NC}  Colima is running but docker CLI can't connect"
+            echo -e "${BLUE}⏳${NC} Setting docker context to colima..."
+            docker context use colima &> /dev/null || true
+            sleep 1
+            if docker ps &> /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Docker is ready (using Colima context)"
+            else
+                echo -e "${RED}✗${NC} Still can't connect to Colima"
+                echo -e "   Try manually: ${YELLOW}docker context use colima${NC}"
+                exit 1
+            fi
         # Check if Docker Desktop app exists
-        if [ -d "/Applications/Docker.app" ]; then
+        elif [ -d "/Applications/Docker.app" ]; then
             echo -e "${BLUE}⏳${NC} Starting Docker Desktop..."
             open -a Docker
 
             echo -e "${BLUE}⏳${NC} Waiting for Docker to be ready..."
             for i in {1..60}; do
-                if docker info &> /dev/null 2>&1; then
+                if docker ps &> /dev/null 2>&1; then
                     echo -e "${GREEN}✓${NC} Docker is ready"
                     break
                 fi
                 sleep 1
             done
 
-            if ! docker info &> /dev/null 2>&1; then
+            if ! docker ps &> /dev/null 2>&1; then
                 echo -e "${RED}✗${NC} Docker failed to start in time"
                 echo -e "   Please start Docker Desktop manually and try again"
                 exit 1
@@ -453,11 +467,12 @@ elif ! docker info &> /dev/null 2>&1; then
             if confirm "Have you started a Docker daemon? (colima, orbstack, etc.)" "n"; then
                 echo -e "${BLUE}⏳${NC} Checking Docker connection..."
                 sleep 2
-                if docker info &> /dev/null 2>&1; then
+                if docker ps &> /dev/null 2>&1; then
                     echo -e "${GREEN}✓${NC} Docker is ready"
                 else
                     echo -e "${RED}✗${NC} Docker daemon still not accessible"
-                    echo -e "   Please start your Docker daemon and run setup again"
+                    echo -e "   Try: ${YELLOW}docker context use colima${NC} or ${YELLOW}docker context use default${NC}"
+                    echo -e "   Or check: ${YELLOW}docker context ls${NC}"
                     exit 1
                 fi
             else
@@ -471,7 +486,7 @@ elif ! docker info &> /dev/null 2>&1; then
         sudo systemctl start docker
 
         sleep 2
-        if docker info &> /dev/null 2>&1; then
+        if docker ps &> /dev/null 2>&1; then
             echo -e "${GREEN}✓${NC} Docker is ready"
         else
             echo -e "${RED}✗${NC} Docker failed to start"
