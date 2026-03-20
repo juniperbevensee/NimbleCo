@@ -133,7 +133,7 @@ export const downloadAttachment = createTool({
 
 export const postWithAttachment = createTool({
   name: 'post_mattermost_message_with_attachment',
-  description: '⚠️ CRITICAL: Upload and attach a file in Mattermost. ALWAYS use this immediately after creating charts/visualizations. NEVER just tell the user about a file - they cannot see it unless you attach it with this tool!',
+  description: '⚠️ Upload and attach a FILE to Mattermost (charts, images, documents). ONLY use when attaching files - NOT for sending text messages (your text response is posted automatically). ALWAYS use this immediately after creating charts/visualizations. NEVER just tell the user about a file - they cannot see it unless you attach it with this tool!',
   category: 'communication',
   use_cases: [
     '⚠️ REQUIRED: Attach charts/visualizations immediately after creating them',
