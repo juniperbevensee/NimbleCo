@@ -11,10 +11,9 @@ import * as path from 'path';
  * Priority:
  * 1. WORKSPACE_ROOT env variable (preferred, set by setup script)
  * 2. WORKSPACE_PATH env variable (legacy support)
- * 3. Bot-specific workspace: storage/workspace-<BOT_ID>
- * 4. Default workspace: storage/workspace
+ * 3. Bot-specific workspace: storage/workspace-<BOT_ID> (always uses BOT_ID, defaults to "default")
  *
- * This ensures each bot has isolated ephemeral storage by default.
+ * This ensures each bot has isolated ephemeral storage.
  */
 export function getWorkspaceRoot(): string {
   // Support both WORKSPACE_ROOT (preferred) and WORKSPACE_PATH (legacy)
@@ -24,14 +23,9 @@ export function getWorkspaceRoot(): string {
     return path.resolve(process.cwd(), workspaceEnv);
   }
 
-  // Default: use bot-specific workspace if BOT_ID is set
-  const botId = process.env.BOT_ID;
-  if (botId) {
-    return path.resolve(process.cwd(), `storage/workspace-${botId}`);
-  }
-
-  // Fallback for single-bot setups
-  return path.resolve(process.cwd(), 'storage/workspace');
+  // Always use bot-specific workspace (default to "default" if BOT_ID not set)
+  const botId = process.env.BOT_ID || 'default';
+  return path.resolve(process.cwd(), `storage/workspace-${botId}`);
 }
 
 /**
@@ -39,10 +33,9 @@ export function getWorkspaceRoot(): string {
  *
  * Priority:
  * 1. FILE_STORAGE_PATH env variable (explicit config)
- * 2. Bot-specific storage: storage/files-<BOT_ID>
- * 3. Default storage: storage/files
+ * 2. Bot-specific storage: storage/files-<BOT_ID> (always uses BOT_ID, defaults to "default")
  *
- * This ensures each bot has isolated persistent file storage by default.
+ * This ensures each bot has isolated persistent file storage.
  */
 export function getFileStorageRoot(): string {
   const storageEnv = process.env.FILE_STORAGE_PATH;
@@ -51,12 +44,7 @@ export function getFileStorageRoot(): string {
     return path.resolve(process.cwd(), storageEnv);
   }
 
-  // Default: use bot-specific storage if BOT_ID is set
-  const botId = process.env.BOT_ID;
-  if (botId) {
-    return path.resolve(process.cwd(), `storage/files-${botId}`);
-  }
-
-  // Fallback for single-bot setups
-  return path.resolve(process.cwd(), 'storage/files');
+  // Always use bot-specific storage (default to "default" if BOT_ID not set)
+  const botId = process.env.BOT_ID || 'default';
+  return path.resolve(process.cwd(), `storage/files-${botId}`);
 }

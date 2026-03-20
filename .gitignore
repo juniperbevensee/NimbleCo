@@ -60,6 +60,10 @@ workspace/
 # Runtime storage (root level only, not shared/tools/src/storage)
 /storage/
 !/storage/.gitkeep
+!/storage/workspace-default/
+!/storage/workspace-default/.gitkeep
+!/storage/files-default/
+!/storage/files-default/.gitkeep
 
 # Claude Code local settings
 .claude/

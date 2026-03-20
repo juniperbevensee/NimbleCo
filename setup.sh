@@ -1123,6 +1123,10 @@ if [ -n "$MATTERMOST_BOT_TOKEN" ]; then
     echo "# Bot Identity" >> .env.$BOT_NAME
     echo "BOT_ID=$BOT_NAME" >> .env.$BOT_NAME
 
+    # Create bot-specific storage directories
+    mkdir -p "storage/workspace-$BOT_NAME"
+    mkdir -p "storage/files-$BOT_NAME"
+
     echo -e "${GREEN}✓${NC} Bot configuration created: .env.$BOT_NAME"
     echo -e "${YELLOW}ℹ${NC}  PM2 will start this bot when you run: ${GREEN}npm start${NC}"
     echo -e "${YELLOW}ℹ${NC}  To create additional bots, run: ${GREEN}npm run setup:bot${NC}"
@@ -1294,7 +1298,8 @@ if confirm "Start coordinator and agents with PM2?" "y"; then
 
     # Create necessary directories
     mkdir -p ./logs
-    mkdir -p ./storage
+    mkdir -p ./storage/workspace-default
+    mkdir -p ./storage/files-default
 
     # Check for any existing PM2 processes
     EXISTING_PROCS=$(pm2 list 2>/dev/null | grep -E "online|stopped|errored|one-launch-status" | wc -l | tr -d ' ')
