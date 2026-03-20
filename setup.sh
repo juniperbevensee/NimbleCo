@@ -1233,6 +1233,15 @@ if confirm "Start Docker infrastructure ($SERVICES)?" "y"; then
     # Check PostgreSQL
     if docker exec nimble-postgres pg_isready -U agent > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} PostgreSQL is running"
+
+        # Run database migrations
+        echo -e "${BLUE}⏳${NC} Running database migrations..."
+        npm run db:migrate > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓${NC} Database migrations complete"
+        else
+            echo -e "${YELLOW}⚠${NC}  Database migrations had warnings (this is usually okay)"
+        fi
     else
         echo -e "${RED}✗${NC} PostgreSQL failed to start"
         echo "     Debug: docker logs nimble-postgres"
