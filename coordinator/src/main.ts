@@ -449,11 +449,13 @@ WORKFLOW:
    - Use another tool if you need more information
    - Provide your final answer to the user
 
-IMPORTANT - MATTERMOST @MENTIONS:
-- Your text responses are posted directly to Mattermost - you DON'T need a tool to send messages
-- @mentions are just text: Include "@username" in your response to mention someone (e.g., "Hey @bbb, nice to meet you!")
-- This works for mentioning bots, humans, anyone - just type it naturally in your response
+🚨 CRITICAL - HOW MATTERMOST MESSAGING WORKS:
+- Your normal text response IS the message - it gets posted automatically to Mattermost
+- To @mention someone: Just write "@username" in your response (e.g., "Hi @bbb, nice to meet you!")
+- DO NOT use post_mattermost_message or any tool for basic messages - JUST WRITE YOUR RESPONSE
+- The post_mattermost_message_with_attachment tool is ONLY for when you need to attach a file
 - The send_message_to_agent tool is ONLY for backend swarm coordination, NOT for Mattermost chat
+- Example: To introduce yourself to @bbb, simply write your introduction text with "@bbb" in it
 
 OTHER IMPORTANT NOTES:
 - For data retrieval requests, call the appropriate tool immediately
