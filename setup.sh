@@ -500,15 +500,28 @@ else
 fi
 
 # Detect Docker Compose version (v2 plugin vs v1 standalone)
-if docker compose version &> /dev/null; then
+if docker compose version &> /dev/null 2>&1; then
     DOCKER_COMPOSE="docker compose"
     echo -e "${GREEN}✓${NC} Docker Compose (v2) available"
-elif command -v docker-compose &> /dev/null; then
+elif command -v docker-compose &> /dev/null 2>&1; then
     DOCKER_COMPOSE="docker-compose"
     echo -e "${GREEN}✓${NC} Docker Compose (v1) available"
 else
     echo -e "${RED}✗${NC} Docker Compose not found"
-    echo -e "   Install with: ${YELLOW}docker-compose-plugin${NC} (v2) or ${YELLOW}docker-compose${NC} (v1)"
+    echo ""
+
+    # Provide context-specific instructions
+    if command -v colima &> /dev/null && colima status 2>&1 | grep -q "colima is running"; then
+        echo -e "${BLUE}For Colima users:${NC}"
+        echo -e "  ${YELLOW}brew install docker-compose${NC} (installs docker-compose v1)"
+        echo -e "  Or install Docker Desktop which includes compose v2"
+    elif [ "$PLATFORM" = "macos" ]; then
+        echo -e "${BLUE}For macOS:${NC}"
+        echo -e "  ${YELLOW}brew install docker-compose${NC}"
+    else
+        echo -e "${BLUE}Install options:${NC}"
+        echo -e "  ${YELLOW}docker-compose-plugin${NC} (v2) or ${YELLOW}docker-compose${NC} (v1)"
+    fi
     exit 1
 fi
 
