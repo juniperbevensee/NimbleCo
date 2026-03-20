@@ -483,6 +483,19 @@ else
     echo -e "${GREEN}✓${NC} Docker is running"
 fi
 
+# Detect Docker Compose version (v2 plugin vs v1 standalone)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+    echo -e "${GREEN}✓${NC} Docker Compose (v2) available"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+    echo -e "${GREEN}✓${NC} Docker Compose (v1) available"
+else
+    echo -e "${RED}✗${NC} Docker Compose not found"
+    echo -e "   Install with: ${YELLOW}docker-compose-plugin${NC} (v2) or ${YELLOW}docker-compose${NC} (v1)"
+    exit 1
+fi
+
 echo ""
 
 # Check for Ollama (optional, for local LLMs)
@@ -1132,14 +1145,14 @@ if confirm "Start Docker infrastructure ($SERVICES)?" "y"; then
     fi
 
     # Check for port conflicts from non-Docker processes
-    # Docker Desktop (com.docker.backend) will show as owner of container ports - that's normal
-    # We only care about non-Docker processes blocking ports
+    # Skip Docker/Colima/SSH processes - they manage container networking and don't block ports
+    # We only care about other processes that would actually conflict
     for PORT in 4222 5432 8222; do
         CONFLICT=$(lsof -i :$PORT -t 2>/dev/null | head -1)
         if [ -n "$CONFLICT" ]; then
             PROC_NAME=$(ps -p $CONFLICT -o comm= 2>/dev/null || echo "unknown")
-            # Skip Docker-related processes - they're managing container ports, not blocking them
-            if [[ "$PROC_NAME" == *"docker"* ]] || [[ "$PROC_NAME" == *"com.docke"* ]]; then
+            # Skip Docker/Colima-related processes - they're managing container ports, not blocking them
+            if [[ "$PROC_NAME" == *"docker"* ]] || [[ "$PROC_NAME" == *"com.docke"* ]] || [[ "$PROC_NAME" == *"ssh"* ]] || [[ "$PROC_NAME" == *"colima"* ]]; then
                 # Port is used by Docker - check if it's our container or a stale one
                 CONTAINER_ON_PORT=$(docker ps --format "{{.Names}}" --filter "publish=$PORT" 2>/dev/null | head -1)
                 if [ -n "$CONTAINER_ON_PORT" ]; then
@@ -1164,7 +1177,7 @@ if confirm "Start Docker infrastructure ($SERVICES)?" "y"; then
     done
 
     echo -e "${BLUE}⏳${NC} Starting core services..."
-    docker-compose up -d nats postgres 2>&1 | grep -v "^$" || true
+    $DOCKER_COMPOSE up -d nats postgres 2>&1 | grep -v "^$" || true
 
     echo -e "${BLUE}⏳${NC} Waiting for services to be ready..."
     sleep 5
@@ -1199,7 +1212,7 @@ if confirm "Start Docker infrastructure ($SERVICES)?" "y"; then
     # Start local Mattermost if configured
     if [ "$USE_LOCAL_MATTERMOST" = "true" ] && [ "$MATTERMOST_REMOVED" != "true" ]; then
         echo -e "${BLUE}⏳${NC} Starting Mattermost (takes ~30s)..."
-        docker-compose up -d mattermost > /dev/null 2>&1
+        $DOCKER_COMPOSE up -d mattermost > /dev/null 2>&1
         echo -e "${GREEN}✓${NC} Mattermost starting at $MATTERMOST_URL"
     elif [ -n "$MATTERMOST_URL" ] && [ "$MATTERMOST_REMOVED" != "true" ]; then
         echo -e "${GREEN}✓${NC} Using hosted Mattermost: $MATTERMOST_URL (no local server needed)"
@@ -1208,7 +1221,7 @@ if confirm "Start Docker infrastructure ($SERVICES)?" "y"; then
     # Start MinIO if configured
     if [ -n "$MINIO_ENDPOINT" ]; then
         echo -e "${BLUE}⏳${NC} Starting MinIO..."
-        docker-compose up -d minio > /dev/null 2>&1
+        $DOCKER_COMPOSE up -d minio > /dev/null 2>&1
         echo -e "${GREEN}✓${NC} MinIO starting at $MINIO_ENDPOINT"
     fi
 fi
