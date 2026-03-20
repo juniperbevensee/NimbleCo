@@ -1286,12 +1286,31 @@ if confirm "Start coordinator and agents with PM2?" "y"; then
     # Create logs directory
     mkdir -p ./logs
 
-    # Clean up any stale PM2 processes (e.g., from repo renames)
-    STALE_PROCS=$(pm2 jlist 2>/dev/null | grep -o '"pm_exec_path":"[^"]*"' | grep -v "$PWD" | wc -l | tr -d ' ')
-    if [ "$STALE_PROCS" -gt 0 ]; then
-        echo -e "${YELLOW}⚠${NC}  Found PM2 processes from other directories, cleaning up..."
-        pm2 delete all > /dev/null 2>&1 || true
-        pm2 save --force > /dev/null 2>&1 || true
+    # Check for any existing PM2 processes
+    EXISTING_PROCS=$(pm2 list 2>/dev/null | grep -E "online|stopped|errored|one-launch-status" | wc -l | tr -d ' ')
+    if [ "$EXISTING_PROCS" -gt 0 ]; then
+        echo -e "${YELLOW}⚠${NC}  Found existing PM2 processes"
+        pm2 list
+        echo ""
+
+        if confirm "Stop and remove all existing PM2 processes?" "y"; then
+            echo -e "${BLUE}⏳${NC} Cleaning up PM2..."
+            pm2 delete all > /dev/null 2>&1 || true
+            pm2 save --force > /dev/null 2>&1 || true
+            pm2 kill > /dev/null 2>&1 || true
+            sleep 2
+            echo -e "${GREEN}✓${NC} PM2 cleaned"
+        fi
+    fi
+
+    # Check for port conflicts
+    PORT_3001=$(lsof -ti :3001 2>/dev/null)
+    if [ -n "$PORT_3001" ]; then
+        echo -e "${YELLOW}⚠${NC}  Port 3001 is in use (dashboard port)"
+        if confirm "Kill process on port 3001?" "y"; then
+            kill -9 $PORT_3001 2>/dev/null || true
+            echo -e "${GREEN}✓${NC} Port 3001 freed"
+        fi
     fi
 
     echo -e "${YELLOW}⏳${NC} Starting services with PM2..."
