@@ -26,7 +26,7 @@
     "coordinator": "cd coordinator && npm run dev",
     "agent:universal": "cd agents/universal && npm run dev",
     "task:create": "node scripts/create-task.js",
-    "db:migrate": "cd coordinator && npm run db:migrate",
+    "db:migrate": "./scripts/run-migrations.sh",
     "db:seed": "cd coordinator && npm run db:seed",
     "test": "npm run test --workspaces",
     "lint": "eslint . --ext .ts,.tsx",
