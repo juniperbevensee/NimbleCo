@@ -420,7 +420,7 @@ elif ! docker ps &> /dev/null 2>&1; then
     echo -e "${YELLOW}⚠${NC}  Docker installed but daemon not accessible"
 
     if [ "$PLATFORM" = "macos" ]; then
-        # PREFER Docker Desktop (official, well-supported, what most people use)
+        # PREFER Docker Desktop if installed
         if [ -d "/Applications/Docker.app" ]; then
             echo -e "${BLUE}⏳${NC} Starting Docker Desktop..."
             open -a Docker
@@ -439,54 +439,46 @@ elif ! docker ps &> /dev/null 2>&1; then
                 echo -e "   Please start Docker Desktop manually and try again"
                 exit 1
             fi
-        # Check for Colima as fallback (only if Docker Desktop not available)
-        elif command -v colima &> /dev/null && colima status 2>&1 | grep -q "colima is running"; then
-            echo -e "${BLUE}ℹ${NC}  Docker Desktop not found, but Colima is running"
-            echo -e "${BLUE}⏳${NC} Trying to connect to Colima..."
-
-            # Find the Colima context name
-            COLIMA_CONTEXT=$(docker context ls --format "{{.Name}}" 2>/dev/null | grep -i colima | head -1)
-
-            if [ -n "$COLIMA_CONTEXT" ]; then
-                docker context use "$COLIMA_CONTEXT" &> /dev/null
-                sleep 1
-            else
-                export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
-            fi
-
-            if docker ps &> /dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC} Docker is ready (using Colima)"
-                echo -e "${YELLOW}ℹ${NC}  Consider installing Docker Desktop for better compatibility: ${YELLOW}brew install --cask docker${NC}"
-            else
-                echo -e "${RED}✗${NC} Can't connect to Colima"
-                echo -e "   Try: ${YELLOW}docker context use colima${NC}"
-                exit 1
-            fi
         else
-            # No Docker daemon found
-            echo -e "${YELLOW}ℹ${NC}  No Docker daemon found"
-            echo -e "   You have Docker CLI but need a Docker daemon running."
-            echo ""
-            echo -e "${BLUE}Options:${NC}"
-            echo -e "  1. Install Docker Desktop (recommended): ${YELLOW}brew install --cask docker${NC}"
-            echo -e "  2. Use Colima (lightweight alternative): ${YELLOW}brew install colima && colima start${NC}"
-            echo -e "  3. Use OrbStack: ${YELLOW}brew install --cask orbstack${NC}"
-            echo ""
+            # Docker Desktop not installed - try to detect and use any running daemon
+            echo -e "${BLUE}ℹ${NC}  Docker Desktop not found, checking for alternative daemons..."
 
-            if confirm "Have you started a Docker daemon? (colima, orbstack, etc.)" "n"; then
-                echo -e "${BLUE}⏳${NC} Checking Docker connection..."
-                sleep 2
-                if docker ps &> /dev/null 2>&1; then
-                    echo -e "${GREEN}✓${NC} Docker is ready"
+            # Try to find and use Colima
+            if command -v colima &> /dev/null && colima status 2>&1 | grep -q "colima is running"; then
+                COLIMA_CONTEXT=$(docker context ls --format "{{.Name}}" 2>/dev/null | grep -i colima | head -1)
+                if [ -n "$COLIMA_CONTEXT" ]; then
+                    docker context use "$COLIMA_CONTEXT" &> /dev/null 2>&1
                 else
-                    echo -e "${RED}✗${NC} Docker daemon still not accessible"
-                    echo -e "   Try: ${YELLOW}docker context use colima${NC} or ${YELLOW}docker context use default${NC}"
-                    echo -e "   Or check: ${YELLOW}docker context ls${NC}"
-                    exit 1
+                    export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
                 fi
+                sleep 1
+            fi
+
+            # Try to find and use OrbStack
+            if ! docker ps &> /dev/null 2>&1 && [ -d "/Applications/OrbStack.app" ]; then
+                ORBSTACK_CONTEXT=$(docker context ls --format "{{.Name}}" 2>/dev/null | grep -i orbstack | head -1)
+                if [ -n "$ORBSTACK_CONTEXT" ]; then
+                    docker context use "$ORBSTACK_CONTEXT" &> /dev/null 2>&1
+                    sleep 1
+                fi
+            fi
+
+            # Check if any of the above worked
+            if docker ps &> /dev/null 2>&1; then
+                DOCKER_CONTEXT=$(docker context show 2>/dev/null || echo "unknown")
+                echo -e "${GREEN}✓${NC} Docker is ready (using $DOCKER_CONTEXT)"
             else
-                echo -e "${RED}✗${NC} Docker daemon required"
-                echo -e "   Please start Docker and run setup again"
+                # No working daemon found - show options
+                echo -e "${YELLOW}ℹ${NC}  No running Docker daemon found"
+                echo ""
+                echo -e "${BLUE}Options:${NC}"
+                echo -e "  1. Install Docker Desktop (recommended): ${YELLOW}brew install --cask docker${NC}"
+                echo -e "  2. Use Colima (lightweight): ${YELLOW}brew install colima && colima start${NC}"
+                echo -e "  3. Use OrbStack: ${YELLOW}brew install --cask orbstack${NC}"
+                echo ""
+                echo -e "Or if you've already started one:"
+                echo -e "  ${YELLOW}docker context ls${NC} (list available contexts)"
+                echo -e "  ${YELLOW}docker context use <name>${NC} (switch to it)"
                 exit 1
             fi
         fi
