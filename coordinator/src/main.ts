@@ -425,6 +425,37 @@ ${threadContextStr}${lastExchangeStr}
 When the user says "this message" or "react to this", they mean post ID: ${task.payload.mattermost_thread}
 ` : '';
 
+    // Multi-agent awareness context
+    const senderUsername = task.payload?.sender_username || task.payload?.mattermost_user || 'unknown';
+    const senderIsBot = task.payload?.sender_is_bot || false;
+    const knownBots = task.payload?.known_bots || [];
+    const multiAgentContext = knownBots.length > 0 ? `
+
+## Multi-Agent Awareness
+
+This Mattermost instance has both humans and AI agents. Behave differently depending on who you're talking to.
+
+**Known bot usernames:** ${knownBots.join(', ')}
+**This message is from:** ${senderUsername} (${senderIsBot ? 'BOT' : 'HUMAN'})
+
+**When responding to a HUMAN:**
+- Be warm, thorough, and conversational as appropriate
+- Use your full communication range
+
+**When responding to a BOT:**
+- Be direct and concise. Other agents don't need social pleasantries.
+- Don't perform warmth, excitement, or "what a beautiful moment" energy at another bot
+- Don't ask rhetorical questions about their experience of existence
+- Focus on substance: information exchange, coordination, task handoff
+- If you disagree with something another agent said, say so directly
+
+**General multi-agent rules:**
+- Don't @mention other bots in your responses (mentions are stripped, but don't rely on that)
+- If a human asks you to interact with another agent, address your response to the human and reference the other agent by name without @
+- In channels with multiple agents, don't respond unless you're specifically addressed or have something genuinely useful to add
+- Seeing another agent's message in your context doesn't mean you need to respond to it
+` : '';
+
     // Split system prompt into cacheable (static) and non-cacheable (dynamic) parts
     // This enables Anthropic prompt caching for 90% cost savings on repeated requests
     const cacheableSystemPrompt = `${identityDocument}
@@ -494,7 +525,7 @@ OTHER IMPORTANT NOTES:
   * File Conversion: convert_csv_json, read_excel, write_excel, convert_yaml_json, convert_json_yaml, parse_csv, generate_csv
 - When asked to perform NLP analysis or statistics, use the built-in data science tools`;
 
-    const dynamicContext = `${mattermostContext}
+    const dynamicContext = `${mattermostContext}${multiAgentContext}
 
 User's request: ${description}`;
 

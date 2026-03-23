@@ -206,6 +206,20 @@ export class MattermostListener {
     }
   }
 
+  // Get username for a user ID
+  private async getUsername(userId: string): Promise<string> {
+    try {
+      const response = await fetch(`${this.mattermostUrl}/api/v4/users/${userId}`, {
+        headers: { 'Authorization': `Bearer ${this.botToken}` },
+      });
+      if (!response.ok) return userId;
+      const user = await response.json() as any;
+      return user.username || userId;
+    } catch {
+      return userId;
+    }
+  }
+
   // Strip @mentions of bot accounts from messages to prevent infinite loops
   private stripBotMentions(message: string): string {
     if (this.botUsernames.size === 0) {
@@ -533,6 +547,9 @@ export class MattermostListener {
       // (coordinator will send progress updates)
       const taskId = randomUUID();
 
+      // Get sender username for bot awareness
+      const senderUsername = await this.getUsername(post.user_id);
+
       const task = {
         id: taskId,
         type: 'custom',
@@ -542,6 +559,9 @@ export class MattermostListener {
           mattermost_thread: post.root_id || post.id, // Use root_id if replying, otherwise this post starts the thread
           mattermost_user: post.user_id,
           is_admin: isAdmin,
+          sender_is_bot: isBot, // For multi-agent awareness
+          sender_username: senderUsername, // For multi-agent awareness
+          known_bots: Array.from(this.botUsernames), // List of bot usernames
           classification, // 'chat' or 'task'
           model_preference: modelPreference, // User-requested model
           attachments: attachments.length > 0 ? {
