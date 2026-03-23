@@ -11,9 +11,8 @@
   ],
   "scripts": {
     "dev": "./scripts/dev.sh",
-    "start": "pm2 start pm2.config.js && pm2 logs",
-    "restart": "npm run build && pm2 restart pm2.config.js && pm2 logs",
-    "restart:clean": "npm run build && pm2 delete all; pm2 save --force; pm2 start pm2.config.js && pm2 logs",
+    "start": "pm2 delete all 2>/dev/null; pm2 start pm2.config.js && pm2 logs",
+    "restart": "npm run build && pm2 delete all 2>/dev/null; pm2 start pm2.config.js && pm2 logs",
     "stop": "pm2 stop pm2.config.js",
     "logs": "pm2 logs",
     "status": "pm2 list",
