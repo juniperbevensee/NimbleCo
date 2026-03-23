@@ -77,6 +77,7 @@ export class MattermostListener {
   private processedPosts: Set<string> = new Set(); // Track processed post IDs (local cache)
   private processedNatsMessages: Set<string> = new Set(); // Track processed NATS messages to prevent duplicates
   private coordinatorId: string; // Unique ID for this coordinator instance
+  private botUsernames: Set<string> = new Set(); // Cache of bot usernames to strip from mentions
 
   constructor(
     private mattermostUrl: string,
@@ -108,6 +109,9 @@ export class MattermostListener {
     // Get bot user ID
     this.botUserId = await this.getBotUserId();
     console.log(`🤖 Bot user ID: ${this.botUserId}`);
+
+    // Fetch bot usernames to filter from mentions (prevents infinite loops)
+    await this.fetchBotUsernames();
 
     // Initialize reaction tracker
     const db = this.getDB();
@@ -169,6 +173,53 @@ export class MattermostListener {
       console.warn(`⚠️  Error checking if user is bot:`, error);
       return false;
     }
+  }
+
+  // Fetch all bot usernames from Mattermost to prevent tagging them in replies
+  private async fetchBotUsernames(): Promise<void> {
+    try {
+      // Fetch users with is_bot role - Mattermost API doesn't have a direct filter,
+      // so we fetch active users and filter. For large teams, this could be optimized.
+      const response = await fetch(`${this.mattermostUrl}/api/v4/users?per_page=200&active=true`, {
+        headers: {
+          'Authorization': `Bearer ${this.botToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.warn('⚠️  Could not fetch users for bot detection');
+        return;
+      }
+
+      const users = await response.json() as any[];
+      for (const user of users) {
+        if (user.is_bot === true && user.username) {
+          this.botUsernames.add(user.username.toLowerCase());
+        }
+      }
+
+      if (this.botUsernames.size > 0) {
+        console.log(`🤖 Loaded ${this.botUsernames.size} bot username(s) for mention filtering`);
+      }
+    } catch (error) {
+      console.warn('⚠️  Error fetching bot usernames:', error);
+    }
+  }
+
+  // Strip @mentions of bot accounts from messages to prevent infinite loops
+  private stripBotMentions(message: string): string {
+    if (this.botUsernames.size === 0) {
+      return message;
+    }
+
+    // Match @username patterns and remove if they're bot usernames
+    return message.replace(/@(\w+)/g, (match, username) => {
+      if (this.botUsernames.has(username.toLowerCase())) {
+        // Keep the username but remove the @ to avoid triggering the bot
+        return username;
+      }
+      return match;
+    });
   }
 
   private async connect() {
@@ -902,6 +953,9 @@ Respond with ONLY one word: chat or task`;
 
   // Post a threaded reply to a specific post
   private async replyToPost(channelId: string, rootId: string, message: string): Promise<string | null> {
+    // Strip @mentions of bot accounts to prevent infinite loops
+    const filteredMessage = this.stripBotMentions(message);
+
     try {
       const response = await fetch(`${this.mattermostUrl}/api/v4/posts`, {
         method: 'POST',
@@ -912,7 +966,7 @@ Respond with ONLY one word: chat or task`;
         body: JSON.stringify({
           channel_id: channelId,
           root_id: rootId,
-          message,
+          message: filteredMessage,
         }),
       });
 
@@ -931,6 +985,9 @@ Respond with ONLY one word: chat or task`;
 
   // Post a top-level message to channel (not threaded)
   private async postToChannel(channelId: string, message: string): Promise<string | null> {
+    // Strip @mentions of bot accounts to prevent infinite loops
+    const filteredMessage = this.stripBotMentions(message);
+
     try {
       const response = await fetch(`${this.mattermostUrl}/api/v4/posts`, {
         method: 'POST',
@@ -940,7 +997,7 @@ Respond with ONLY one word: chat or task`;
         },
         body: JSON.stringify({
           channel_id: channelId,
-          message,
+          message: filteredMessage,
         }),
       });
 
