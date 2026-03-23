@@ -11,10 +11,16 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_ROOT"
 
-# Check if Docker is running
+# Check if Docker is running, start it if not
 if ! docker info > /dev/null 2>&1; then
-  echo "❌ Docker is not running. Please start Docker Desktop and try again."
-  exit 1
+  echo "🐳 Docker is not running. Starting Docker Desktop..."
+  open -a Docker
+
+  # Wait for Docker to be ready
+  while ! docker info > /dev/null 2>&1; do
+    sleep 1
+  done
+  echo "   ✅ Docker is ready"
 fi
 
 # Clean up any existing PM2 processes (clears "errored" state)
