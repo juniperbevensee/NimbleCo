@@ -1,8 +1,8 @@
 # NimbleCo
 
-**A self-hosted, hackable agent orchestration platform for teams.**
+**Multiplayer AI for the cyborg era.**
 
-Mattermost + intelligent modular tool rich agents working together. Built for **speed, simplicity, and local-first autonomy**.
+Mattermost + intelligent, modular and tool rich agents working together. Built for **speed, simplicity, and local-first autonomy**.
 
 ## Vision
 
