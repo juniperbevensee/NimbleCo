@@ -164,6 +164,27 @@ apps.push({
   env_file: path.join(rootDir, '.env'),
 });
 
+// Add universal agents for swarm processing (3 instances for parallelism)
+const numAgents = parseInt(process.env.UNIVERSAL_AGENT_COUNT || '3', 10);
+console.log(`\n✅ Starting ${numAgents} universal agent(s) for swarm processing`);
+for (let i = 1; i <= numAgents; i++) {
+  apps.push({
+    name: `nimble-agent-${i}`,
+    script: './agents/universal/dist/main.js',
+    cwd: rootDir,
+    exec_mode: 'fork',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '500M',
+    error_file: `./logs/pm2-agent-${i}-error.log`,
+    out_file: `./logs/pm2-agent-${i}-out.log`,
+    log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    merge_logs: true,
+    env_file: path.join(rootDir, '.env'),
+  });
+}
+
 console.log('\n✅ PM2 configuration ready\n');
 
 module.exports = {
