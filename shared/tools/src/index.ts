@@ -381,6 +381,7 @@ export async function executeToolCall(
 export * from './base';
 export * from './permissions';
 export * from './access-tiers';
+export * from './policy/client';
 export * from './crm/attio';
 export * from './meetings/jitsi';
 export * from './docs/notion';
