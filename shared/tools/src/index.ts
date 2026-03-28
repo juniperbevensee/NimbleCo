@@ -5,6 +5,7 @@ import { Tool, ToolRegistry, TieredToolLoader, ToolContext, filterConfiguredTool
 import { checkToolPermission, extractTargetRoom, ToolPermissionContext } from './permissions';
 import { filterToolsByAccessTier, getLlmModelForUser, isProviderAllowed, getAccessTierConfig } from './access-tiers';
 import { PolicyClient } from './policy/client';
+import { HttpPolicyClient, createHttpPolicyClientFromEnv } from './policy/http-client';
 import { attioTools } from './crm/attio';
 import { jitsiTools } from './meetings/jitsi';
 import { notionTools } from './docs/notion';
@@ -399,6 +400,7 @@ export * from './base';
 export * from './permissions';
 export * from './access-tiers';
 export * from './policy/client';
+export * from './policy/http-client';
 export * from './crm/attio';
 export * from './meetings/jitsi';
 export * from './docs/notion';
