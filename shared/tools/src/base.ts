@@ -110,6 +110,11 @@ export class ToolRegistry {
   getTool(name: string): Tool | undefined {
     return this.tools.get(name);
   }
+
+  // Get all registered tools (useful for export/introspection)
+  getAllTools(): Tool[] {
+    return Array.from(this.tools.values());
+  }
 }
 
 // Tiered tool loading strategy

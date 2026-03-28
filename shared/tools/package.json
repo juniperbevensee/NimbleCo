@@ -5,9 +5,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "test": "jest"
+    "build": "pnpm exec tsc",
+    "dev": "pnpm exec tsc --watch",
+    "test": "pnpm exec jest",
+    "export-tools": "pnpm exec tsx scripts/export-for-swarm-map.ts"
   },
   "dependencies": {
     "@notionhq/client": "^2.2.15",

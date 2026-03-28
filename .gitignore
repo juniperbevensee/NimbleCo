@@ -79,3 +79,6 @@ additional-tools/example/*.js
 additional-tools/example/*.js.map
 additional-tools/example/*.d.ts
 additional-tools/example/*.d.ts.map
+
+# Tool export files (generated)
+nimbleco-tools-export.json
