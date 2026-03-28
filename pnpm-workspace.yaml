@@ -1,0 +1,6 @@
+packages:
+  - 'shared/tools'
+  - 'coordinator'
+
+onlyBuiltDependencies:
+  - "open-measures"

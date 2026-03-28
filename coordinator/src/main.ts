@@ -28,7 +28,9 @@ import {
   registry as toolRegistry,
   executeToolCall,
   getToolsForTask,
-  ToolContext
+  ToolContext,
+  filterToolsByPolicy,
+  AllowAllPolicyClient
 } from '@nimbleco/tools';
 import { checkCircuitBreaker, checkInvocationLimit } from './rate-limiter';
 
@@ -377,6 +379,25 @@ class Coordinator {
     // Get relevant tools for this task
     let tools = getToolsForTask(description);
 
+    // Policy-based tool filtering (optional, fails safe to allow-all)
+    // This filters the tool schema BEFORE sending to LLM to reduce context window
+    // and prevent LLM from attempting to use unauthorized tools
+    const policyClient = new AllowAllPolicyClient(); // TODO: Make this configurable
+    const toolContext: ToolContext = {
+      user_id: task.payload?.mattermost_user || task.payload?.matrix_user || 'unknown',
+      platform: task.payload?.mattermost_channel ? 'mattermost' : 'matrix',
+      room_id: task.payload?.mattermost_channel || task.payload?.matrix_room || 'unknown',
+      invocation_id: invocationId
+    };
+
+    try {
+      tools = await filterToolsByPolicy(tools, toolContext, policyClient);
+      console.log(`🔐 Policy filtering applied (${tools.length} tools allowed)`);
+    } catch (error) {
+      console.warn(`⚠️  Policy filtering failed, using all tools:`, error);
+      // Fail-safe: continue with all tools if policy check fails
+    }
+
     // Filter out inter-agent messaging for coordinator (only for swarms)
     // Prevents confusion between Mattermost @mentions and inter-agent messaging
     tools = tools.filter(t => t.name !== 'send_message_to_agent');
@@ -710,7 +731,8 @@ User's request: ${description}`;
             toolCall.tool,
             toolCall.input,
             context,
-            task.payload // Pass payload for permission checks
+            task.payload, // Pass payload for permission checks
+            policyClient // Pass policy client for execution guard
           );
 
           console.log(`  ✓ Tool result:`, JSON.stringify(toolResult).substring(0, 200));
@@ -817,7 +839,9 @@ User's request: ${description}`;
                   content: chartContent,
                   encoding: 'base64'
                 },
-                attachContext
+                attachContext,
+                undefined, // No taskPayload needed here
+                policyClient // Pass policy client for execution guard
               );
 
               // Link the response post to the invocation for reaction tracking

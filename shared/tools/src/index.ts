@@ -4,6 +4,8 @@
 import { Tool, ToolRegistry, TieredToolLoader, ToolContext, filterConfiguredTools } from './base';
 import { checkToolPermission, extractTargetRoom, ToolPermissionContext } from './permissions';
 import { filterToolsByAccessTier, getLlmModelForUser, isProviderAllowed, getAccessTierConfig } from './access-tiers';
+import { PolicyClient } from './policy/client';
+import { HttpPolicyClient, createHttpPolicyClientFromEnv } from './policy/http-client';
 import { attioTools } from './crm/attio';
 import { jitsiTools } from './meetings/jitsi';
 import { notionTools } from './docs/notion';
@@ -306,7 +308,8 @@ export async function executeToolCall(
   toolName: string,
   input: any,
   context: ToolContext,
-  taskPayload?: any // Optional: admin/room info from chat platforms
+  taskPayload?: any, // Optional: admin/room info from chat platforms
+  policyClient?: PolicyClient // Optional: policy client for execution guard
 ): Promise<any> {
   const tool = registry.getTool(toolName);
 
@@ -315,6 +318,21 @@ export async function executeToolCall(
       success: false,
       error: `Tool '${toolName}' not found. Available tools: ${registry.getAllNames().join(', ')}`
     };
+  }
+
+  // Policy-based execution guard (optional, fails safe)
+  // This is the second stage of enforcement - before actually running the tool
+  if (policyClient) {
+    try {
+      const { guardToolExecution } = await import('./policy/client');
+      await guardToolExecution(toolName, context, policyClient);
+    } catch (error: any) {
+      // If guard throws, execution is denied
+      return {
+        success: false,
+        error: error.message || `Access denied to tool: ${toolName}`
+      };
+    }
   }
 
   // Check permissions if tool requires them and we have user context
@@ -381,6 +399,8 @@ export async function executeToolCall(
 export * from './base';
 export * from './permissions';
 export * from './access-tiers';
+export * from './policy/client';
+export * from './policy/http-client';
 export * from './crm/attio';
 export * from './meetings/jitsi';
 export * from './docs/notion';
