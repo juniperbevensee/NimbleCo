@@ -10,11 +10,7 @@ import path from 'path';
 import * as XLSX from 'xlsx';
 import * as yaml from 'js-yaml';
 import Papa from 'papaparse';
-
-// Workspace root - same as in workspace.ts
-function getWorkspaceRoot(): string {
-  return process.env.WORKSPACE_PATH || path.resolve(process.cwd(), 'storage/workspace');
-}
+import { getWorkspaceRoot } from '../workspace-helper';
 
 // ============================================================================
 // ADVANCED STATISTICS TOOLS

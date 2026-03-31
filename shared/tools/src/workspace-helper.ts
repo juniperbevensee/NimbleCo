@@ -1,9 +1,30 @@
 /**
  * Storage path helpers
  * Centralized logic for determining storage paths with bot isolation
+ *
+ * All bot-specific storage is organized under: storage/{BOT_ID}/
+ *   - storage/{BOT_ID}/workspace/   (ephemeral working files)
+ *   - storage/{BOT_ID}/files/       (persistent file storage)
+ *   - storage/{BOT_ID}/identity.md  (persona identity document)
+ *   - storage/{BOT_ID}/memory.md    (persistent memory)
  */
 
 import * as path from 'path';
+
+/**
+ * Get the bot ID for storage isolation
+ */
+export function getBotId(): string {
+  return process.env.BOT_ID || 'default';
+}
+
+/**
+ * Get the bot's root storage directory: storage/{BOT_ID}/
+ */
+export function getBotStorageRoot(): string {
+  const botId = getBotId();
+  return path.resolve(process.cwd(), `storage/${botId}`);
+}
 
 /**
  * Get the workspace root directory for the current bot
@@ -11,7 +32,7 @@ import * as path from 'path';
  * Priority:
  * 1. WORKSPACE_ROOT env variable (preferred, set by setup script)
  * 2. WORKSPACE_PATH env variable (legacy support)
- * 3. Bot-specific workspace: storage/workspace-<BOT_ID> (always uses BOT_ID, defaults to "default")
+ * 3. Bot-specific workspace: storage/{BOT_ID}/workspace/
  *
  * This ensures each bot has isolated ephemeral storage.
  */
@@ -23,9 +44,7 @@ export function getWorkspaceRoot(): string {
     return path.resolve(process.cwd(), workspaceEnv);
   }
 
-  // Always use bot-specific workspace (default to "default" if BOT_ID not set)
-  const botId = process.env.BOT_ID || 'default';
-  return path.resolve(process.cwd(), `storage/workspace-${botId}`);
+  return path.join(getBotStorageRoot(), 'workspace');
 }
 
 /**
@@ -33,7 +52,7 @@ export function getWorkspaceRoot(): string {
  *
  * Priority:
  * 1. FILE_STORAGE_PATH env variable (explicit config)
- * 2. Bot-specific storage: storage/files-<BOT_ID> (always uses BOT_ID, defaults to "default")
+ * 2. Bot-specific storage: storage/{BOT_ID}/files/
  *
  * This ensures each bot has isolated persistent file storage.
  */
@@ -44,7 +63,19 @@ export function getFileStorageRoot(): string {
     return path.resolve(process.cwd(), storageEnv);
   }
 
-  // Always use bot-specific storage (default to "default" if BOT_ID not set)
-  const botId = process.env.BOT_ID || 'default';
-  return path.resolve(process.cwd(), `storage/files-${botId}`);
+  return path.join(getBotStorageRoot(), 'files');
+}
+
+/**
+ * Get the memory file path for the current bot: storage/{BOT_ID}/memory.md
+ */
+export function getMemoryFilePath(): string {
+  return path.join(getBotStorageRoot(), 'memory.md');
+}
+
+/**
+ * Get the identity file path for the current bot: storage/{BOT_ID}/identity.md
+ */
+export function getIdentityFilePath(): string {
+  return path.join(getBotStorageRoot(), 'identity.md');
 }

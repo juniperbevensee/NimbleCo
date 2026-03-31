@@ -7,9 +7,7 @@
 
 import { Tool } from '../base';
 import * as fs from 'fs/promises';
-import * as path from 'path';
-
-const MEMORY_FILE_PATH = path.resolve(__dirname, '../../../../storage/memory.md');
+import { getMemoryFilePath, getBotStorageRoot } from '../workspace-helper';
 
 export const memoryTools: Tool[] = [
   {
@@ -29,12 +27,12 @@ export const memoryTools: Tool[] = [
     },
     handler: async (input: any, context: any) => {
       try {
-        const content = await fs.readFile(MEMORY_FILE_PATH, 'utf-8');
+        const content = await fs.readFile(getMemoryFilePath(), 'utf-8');
 
         return {
           success: true,
           content,
-          path: MEMORY_FILE_PATH,
+          path: getMemoryFilePath(),
         };
       } catch (error: any) {
         if (error.code === 'ENOENT') {
@@ -89,7 +87,7 @@ export const memoryTools: Tool[] = [
         // Read current memory file
         let currentContent = '';
         try {
-          currentContent = await fs.readFile(MEMORY_FILE_PATH, 'utf-8');
+          currentContent = await fs.readFile(getMemoryFilePath(), 'utf-8');
         } catch (error: any) {
           if (error.code !== 'ENOENT') {
             throw error;
@@ -114,7 +112,7 @@ export const memoryTools: Tool[] = [
           updatedContent = currentContent + '\n' + newEntry;
         }
 
-        await fs.writeFile(MEMORY_FILE_PATH, updatedContent, 'utf-8');
+        await fs.writeFile(getMemoryFilePath(), updatedContent, 'utf-8');
 
         return {
           success: true,
@@ -153,7 +151,7 @@ export const memoryTools: Tool[] = [
         const { notes } = input;
 
         // Read current memory file
-        let currentContent = await fs.readFile(MEMORY_FILE_PATH, 'utf-8');
+        let currentContent = await fs.readFile(getMemoryFilePath(), 'utf-8');
 
         // Find and replace Session Notes section
         const sessionNotesIndex = currentContent.indexOf('# Session Notes');
@@ -172,7 +170,7 @@ export const memoryTools: Tool[] = [
           '<!-- Ephemeral: Cleared on each restart -->\n\n' +
           notes + '\n';
 
-        await fs.writeFile(MEMORY_FILE_PATH, updatedContent, 'utf-8');
+        await fs.writeFile(getMemoryFilePath(), updatedContent, 'utf-8');
 
         return {
           success: true,

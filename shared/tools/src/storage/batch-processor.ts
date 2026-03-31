@@ -6,10 +6,7 @@
 import { Tool, ToolContext } from '../base';
 import { promises as fs } from 'fs';
 import path from 'path';
-
-function getWorkspaceRoot(): string {
-  return process.env.WORKSPACE_PATH || path.resolve(process.cwd(), '../storage/workspace');
-}
+import { getWorkspaceRoot } from '../workspace-helper';
 
 /**
  * Process a large JSON file containing an array, yielding batches

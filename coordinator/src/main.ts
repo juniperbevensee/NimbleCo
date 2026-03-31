@@ -40,19 +40,26 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const sc = StringCodec();
 
 // Load constitutional identity document
-// Try personal version first (gitignored), fall back to template
-const IDENTITY_PATH = path.resolve(__dirname, '../../storage/identity.md');
+// Priority: storage/{BOT_ID}/identity.md → storage/identity.md → config/identity.template.md
+const botId = process.env.BOT_ID || 'default';
+const IDENTITY_PATH_BOT = path.resolve(__dirname, `../../storage/${botId}/identity.md`);
+const IDENTITY_PATH_SHARED = path.resolve(__dirname, '../../storage/identity.md');
 const IDENTITY_TEMPLATE_PATH = path.resolve(__dirname, '../../config/identity.template.md');
 let identityDocument = '';
 try {
-  identityDocument = fs.readFileSync(IDENTITY_PATH, 'utf-8');
-  console.log('📜 Loaded personal identity document');
+  identityDocument = fs.readFileSync(IDENTITY_PATH_BOT, 'utf-8');
+  console.log(`📜 Loaded persona identity: storage/${botId}/identity.md`);
 } catch (error) {
   try {
-    identityDocument = fs.readFileSync(IDENTITY_TEMPLATE_PATH, 'utf-8');
-    console.log('📜 Loaded identity template (create storage/identity.md to personalize)');
+    identityDocument = fs.readFileSync(IDENTITY_PATH_SHARED, 'utf-8');
+    console.log(`📜 Loaded shared identity (create storage/${botId}/identity.md to personalize)`);
   } catch (error2) {
-    console.warn('⚠️  Could not load identity document:', error2);
+    try {
+      identityDocument = fs.readFileSync(IDENTITY_TEMPLATE_PATH, 'utf-8');
+      console.log(`📜 Loaded identity template (create storage/${botId}/identity.md to personalize)`);
+    } catch (error3) {
+      console.warn('⚠️  Could not load identity document:', error3);
+    }
   }
 }
 
@@ -1763,6 +1770,7 @@ ${data.agents.map((a: any) => `- ${a.agent}: ${a.status}`).join('\n')}
 
     // Publish to NATS for mattermost-listener to handle
     const messageData = {
+      bot_id: this.botId, // Route to correct bot when multiple bots running
       channel_id: roomId,
       root_id: eventId,
       message,

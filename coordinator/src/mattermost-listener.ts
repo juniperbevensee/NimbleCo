@@ -78,6 +78,7 @@ export class MattermostListener {
   private processedNatsMessages: Set<string> = new Set(); // Track processed NATS messages to prevent duplicates
   private coordinatorId: string; // Unique ID for this coordinator instance
   private botUsernames: Set<string> = new Set(); // Cache of bot usernames to strip from mentions
+  private botId: string; // Bot identifier for multi-bot routing
 
   constructor(
     private mattermostUrl: string,
@@ -91,6 +92,8 @@ export class MattermostListener {
     this.logAllMessages = logAllMessages !== false; // Default to true
     // Generate unique coordinator ID for deduplication
     this.coordinatorId = `coord-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    // Bot ID for multi-bot NATS message routing
+    this.botId = process.env.BOT_ID || 'default';
   }
 
   async start() {
@@ -118,10 +121,9 @@ export class MattermostListener {
     this.reactionTracker = new ReactionTracker(db);
 
     // Subscribe to messages from coordinator
-    // Use queue group to ensure only ONE mattermost listener processes each message
-    // Without this, multiple coordinators or zombie subscriptions cause duplicates
+    // NOTE: No queue group - all listeners receive all messages and filter by bot_id
+    // This is necessary for multi-bot setups where each bot needs to post its own responses
     this.nc.subscribe('messages.to-mattermost', {
-      queue: 'mattermost-posters', // Only one subscriber in this queue gets each message
       callback: async (err, msg) => {
         if (err) {
           console.error('Error receiving message:', err);
@@ -921,7 +923,13 @@ Respond with ONLY one word: chat or task`;
   }
 
   private async handleMattermostMessage(data: any) {
-    const { channel_id, root_id, message, is_final, invocation_id } = data;
+    const { bot_id, channel_id, root_id, message, is_final, invocation_id } = data;
+
+    // Multi-bot routing: only process messages intended for this bot
+    // If bot_id is specified and doesn't match, skip (another listener will handle it)
+    if (bot_id && bot_id !== this.botId) {
+      return; // Silent skip - not for this bot
+    }
 
     if (!channel_id || !message) {
       console.error('Message missing required fields:', data);

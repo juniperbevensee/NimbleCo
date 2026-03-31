@@ -407,6 +407,7 @@ export * from './docs/notion';
 export * from './calendar/ics';
 export * from './storage/files';
 export * from './storage/workspace';
+export * from './workspace-helper';
 export * from './code/github';
 // Export filesystem tools with explicit names to avoid conflicts
 export { filesystemTools } from './filesystem/tools';

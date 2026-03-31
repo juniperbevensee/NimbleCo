@@ -58,12 +58,22 @@ workspace/
 !workspace/.gitkeep
 
 # Runtime storage (root level only, not shared/tools/src/storage)
+# Keep structure files, ignore all persona-specific content
 /storage/
 !/storage/.gitkeep
 !/storage/workspace-default/
 !/storage/workspace-default/.gitkeep
 !/storage/files-default/
 !/storage/files-default/.gitkeep
+
+# Per-persona storage directories (identity, memory, workspace, files)
+/storage/*/identity.md
+/storage/*/memory.md
+/storage/*/workspace/
+/storage/*/files/
+
+# PM2 ecosystem files (contain secrets)
+.pm2-nimble-*.json
 
 # Claude Code local settings
 .claude/
