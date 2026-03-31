@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 // Export NimbleCo tools in a format Swarm-Map can import
 
-import { registry } from '../src/index.js';
+import { registry, Tool } from '../src/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,12 +31,12 @@ const CATEGORY_TO_TIER: Record<string, string> = {
   'compute': 'high',
   'analytics': 'high',
 
-  // MEDIUM risk - read/write operations
-  'crm': 'medium',
-  'docs': 'medium',
-  'code': 'medium',
-  'storage': 'medium',
-  'calendar': 'medium',
+  // MEDIUM risk - read/write operations (uses "med" to match Swarm-Map DB)
+  'crm': 'med',
+  'docs': 'med',
+  'code': 'med',
+  'storage': 'med',
+  'calendar': 'med',
 
   // LOW risk - read-only or communication
   'web': 'low',
@@ -44,8 +44,65 @@ const CATEGORY_TO_TIER: Record<string, string> = {
   'research': 'low',
   'communication': 'low',
   'memory': 'low',
-  'sales': 'low', // Added sales as low-risk
+  'sales': 'low',
 };
+
+/**
+ * Auto-discover and load additional tools from the additional-tools/ directory
+ * This ensures ALL tools get exported, not just core tools
+ */
+async function loadAdditionalToolsForExport(): Promise<void> {
+  const additionalToolsDir = path.resolve(__dirname, '../../..', 'additional-tools');
+
+  // Check if directory exists
+  if (!fs.existsSync(additionalToolsDir)) {
+    console.log('   No additional-tools directory found, exporting core tools only');
+    return;
+  }
+
+  // Find all subdirectories with index.js
+  const entries = fs.readdirSync(additionalToolsDir, { withFileTypes: true });
+  const categories = entries
+    .filter(e => e.isDirectory() && e.name !== 'example')
+    .filter(e => fs.existsSync(path.join(additionalToolsDir, e.name, 'index.js')))
+    .map(e => e.name);
+
+  if (categories.length === 0) {
+    console.log('   No compiled additional tools found');
+    console.log('   Run: npx tsc -p additional-tools/tsconfig.json');
+    return;
+  }
+
+  console.log(`   Found additional tool categories: ${categories.join(', ')}`);
+
+  for (const category of categories) {
+    const categoryPath = path.join(additionalToolsDir, category, 'index.js');
+
+    try {
+      const module = await import(categoryPath);
+
+      // Look for exported tool arrays
+      const possibleExports = [`${category}Tools`, 'tools', 'additionalTools', 'default'];
+      let loaded = false;
+
+      for (const exportName of possibleExports) {
+        const tools = exportName === 'default' ? module.default : module[exportName];
+        if (tools && Array.isArray(tools)) {
+          tools.forEach((tool: Tool) => registry.register(tool));
+          console.log(`   ✅ Loaded ${tools.length} tool(s) from ${category}`);
+          loaded = true;
+          break;
+        }
+      }
+
+      if (!loaded) {
+        console.warn(`   ⚠️  No tool arrays found in ${category}/index.js`);
+      }
+    } catch (error: any) {
+      console.error(`   ❌ Failed to load ${category}: ${error.message}`);
+    }
+  }
+}
 
 /**
  * Export all registered tools in Swarm-Map format
@@ -66,10 +123,15 @@ function exportTools(): SwarmMapTool[] {
 /**
  * Main export function
  */
-function main() {
+async function main() {
   console.log('🔧 Exporting NimbleCo tools for Swarm-Map...\n');
 
-  // Export tools
+  // Load additional tools first (auto-discover from additional-tools/)
+  console.log('📦 Loading additional tools...');
+  await loadAdditionalToolsForExport();
+  console.log('');
+
+  // Export tools (now includes both core and additional)
   const tools = exportTools();
 
   // Group by tier for summary
@@ -123,4 +185,7 @@ function main() {
 }
 
 // Run the export
-main();
+main().catch(err => {
+  console.error('❌ Export failed:', err);
+  process.exit(1);
+});

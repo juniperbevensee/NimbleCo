@@ -191,9 +191,11 @@ class Coordinator {
 
     // IMPORTANT: Set up subscriptions BEFORE starting listeners
     // This prevents race conditions where tasks are dispatched before subscriptions are ready
-    const sub = this.nc.subscribe('tasks.from-chat', { queue: 'coordinator-workers' });
-    const mattermostSub = this.nc.subscribe('tasks.from-mattermost', { queue: 'coordinator-workers' });
-    console.log('📥 Task subscriptions ready');
+    // NOTE: Each bot subscribes to its OWN subject to ensure tasks are processed by the correct bot
+    // Using shared subjects would cause cross-talk between bots
+    const sub = this.nc.subscribe(`tasks.from-chat.${this.botId}`, { queue: `coordinator-${this.botId}` });
+    const mattermostSub = this.nc.subscribe(`tasks.from-mattermost.${this.botId}`, { queue: `coordinator-${this.botId}` });
+    console.log(`📥 Task subscriptions ready for bot: ${this.botId}`);
 
     // Start Mattermost listener if configured
     if (process.env.MATTERMOST_URL && process.env.MATTERMOST_BOT_TOKEN) {
@@ -394,7 +396,8 @@ class Coordinator {
       user_id: task.payload?.mattermost_user || task.payload?.matrix_user || 'unknown',
       platform: task.payload?.mattermost_channel ? 'mattermost' : 'matrix',
       room_id: task.payload?.mattermost_channel || task.payload?.matrix_room || 'unknown',
-      invocation_id: invocationId
+      credentials: {},
+      invocation_id: invocationId ?? undefined
     };
 
     try {

@@ -28,6 +28,7 @@ describe('Policy Integration: Schema Filtering', () => {
       user_id: 'user123',
       platform: 'mattermost',
       room_id: 'team456',
+      credentials: {},
       invocation_id: 'inv789',
     };
 
@@ -37,21 +38,24 @@ describe('Policy Integration: Schema Filtering', () => {
         name: 'read_file',
         description: 'Read file contents',
         category: 'filesystem',
-        input_schema: { type: 'object', properties: {} },
+        use_cases: ['read files'],
+        parameters: { type: 'object', properties: {} },
         handler: async () => ({ success: true }),
       },
       {
         name: 'write_file',
         description: 'Write to file',
         category: 'filesystem',
-        input_schema: { type: 'object', properties: {} },
+        use_cases: ['write files'],
+        parameters: { type: 'object', properties: {} },
         handler: async () => ({ success: true }),
       },
       {
         name: 'execute_bash',
         description: 'Execute bash command',
-        category: 'system',
-        input_schema: { type: 'object', properties: {} },
+        category: 'compute',
+        use_cases: ['execute commands'],
+        parameters: { type: 'object', properties: {} },
         handler: async () => ({ success: true }),
       },
     ];
@@ -160,6 +164,7 @@ describe('Policy Integration: Execution Guard', () => {
       user_id: 'user123',
       platform: 'mattermost',
       room_id: 'team456',
+      credentials: {},
       invocation_id: 'inv789',
     };
 

@@ -116,15 +116,21 @@ if (validEnvFiles.length === 0) {
 console.log(`\n✅ Starting ${validEnvFiles.length} bot(s):`);
 const apps = validEnvFiles.map(envFile => {
   const botName = envFile.replace('.env.', '');
-  console.log(`   - ${botName} (${envFile})`);
+  const filePath = path.join(rootDir, envFile);
+  const envVars = parseEnvFile(filePath);
+  console.log(`   - ${botName} (${envFile}) BOT_ID=${envVars.BOT_ID || botName}`);
 
   return {
     name: `nimble-${botName}`,
     script: './coordinator/dist/main.js',
     cwd: rootDir,
 
-    // Load environment from specific .env.* file
-    env_file: path.join(rootDir, envFile),
+    // Actually load environment variables from the .env file
+    env: {
+      ...envVars,
+      // Ensure BOT_ID is set even if not in .env file
+      BOT_ID: envVars.BOT_ID || botName,
+    },
 
     // Process management
     instances: 1,

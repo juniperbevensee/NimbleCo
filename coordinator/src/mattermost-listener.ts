@@ -585,9 +585,11 @@ export class MattermostListener {
 
       console.log(`📤 Dispatching ${classification} to coordinator: ${taskId}`);
       console.log(`   User: ${post.user_id}${isAdmin ? ' (admin)' : ''}`);
+      console.log(`   Bot: ${this.botId}`);
 
-      // Publish to NATS (fire-and-forget for now)
-      this.nc.publish('tasks.from-mattermost', sc.encode(JSON.stringify(task)));
+      // Publish to NATS on bot-specific subject to ensure correct coordinator processes it
+      // Using shared subject would cause any coordinator to process it (wrong bot_id in response)
+      this.nc.publish(`tasks.from-mattermost.${this.botId}`, sc.encode(JSON.stringify(task)));
 
       console.log(`✅ Task dispatched`);
 

@@ -11,6 +11,8 @@ export interface ToolContext {
   room_id?: string;
   // Agent ID for inter-agent communication
   agent_id?: string;
+  // Unique invocation ID for tracking tool calls
+  invocation_id?: string;
 }
 
 export interface Tool {
