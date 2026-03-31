@@ -19,7 +19,15 @@ interface SwarmMapTool {
     requiresContextRoom?: boolean;
     sensitiveReason?: string;
   };
+  /**
+   * Source module: "core" for built-in tools, or folder name (e.g., "osint", "cryptid")
+   * for additional tools. Used by Swarm-Map to filter based on ADDITIONAL_TOOLS env var.
+   */
+  sourceModule: string;
 }
+
+// Track which tools come from which additional-tools module
+const additionalToolModules = new Map<string, string>();
 
 /**
  * Map NimbleCo tool categories to Swarm-Map risk tiers
@@ -38,8 +46,8 @@ const CATEGORY_TO_TIER: Record<string, string> = {
   'storage': 'med',
   'calendar': 'med',
 
-  // LOW risk - read-only or communication
-  'web': 'low',
+  // HIGH risk - web content can contain prompt injection
+  'web': 'high',
   'meetings': 'low',
   'research': 'low',
   'communication': 'low',
@@ -88,7 +96,11 @@ async function loadAdditionalToolsForExport(): Promise<void> {
       for (const exportName of possibleExports) {
         const tools = exportName === 'default' ? module.default : module[exportName];
         if (tools && Array.isArray(tools)) {
-          tools.forEach((tool: Tool) => registry.register(tool));
+          tools.forEach((tool: Tool) => {
+            registry.register(tool);
+            // Track that this tool comes from this additional-tools module
+            additionalToolModules.set(tool.name, category);
+          });
           console.log(`   ✅ Loaded ${tools.length} tool(s) from ${category}`);
           loaded = true;
           break;
@@ -117,6 +129,8 @@ function exportTools(): SwarmMapTool[] {
     description: tool.description,
     requiredEnv: tool.requiredEnv,
     permissions: tool.permissions,
+    // "core" for built-in tools, or the folder name (e.g., "osint", "cryptid") for additional tools
+    sourceModule: additionalToolModules.get(tool.name) || 'core',
   }));
 }
 

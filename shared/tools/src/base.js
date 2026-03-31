@@ -48,6 +48,10 @@ class ToolRegistry {
     getTool(name) {
         return this.tools.get(name);
     }
+    // Get all registered tools (useful for export/introspection)
+    getAllTools() {
+        return Array.from(this.tools.values());
+    }
 }
 exports.ToolRegistry = ToolRegistry;
 // Tiered tool loading strategy

@@ -5,6 +5,7 @@ export interface ToolContext {
     conversation_id?: string;
     room_id?: string;
     agent_id?: string;
+    invocation_id?: string;
 }
 export interface Tool {
     name: string;
@@ -47,6 +48,7 @@ export declare class ToolRegistry {
     findByUseCase(useCase: string): Tool[];
     getAllNames(): string[];
     getTool(name: string): Tool | undefined;
+    getAllTools(): Tool[];
 }
 export declare class TieredToolLoader {
     private registry;
