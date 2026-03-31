@@ -61,8 +61,8 @@ steps:
   # Create Notion page
   - name: create-notion-page
     agent: coordinator
-    action: create_notion_page
-    tool: create_notion_page
+    action: notion_create_page
+    tool: notion_create_page
     inputs:
       parent_id: ${{ env.NOTION_STANDUP_DB }}
       title: "Standup - ${{ inputs.date }}"

@@ -10,7 +10,9 @@ import { attioTools } from './crm/attio';
 import { jitsiTools } from './meetings/jitsi';
 import { notionTools } from './docs/notion';
 import { icsCalendarTools } from './calendar/ics';
+import { googleCalendarTools } from './calendar/google';
 import { fileStorageTools } from './storage/files';
+import { googleDriveTools } from './storage/google-drive';
 import { workspaceTools } from './storage/workspace';
 import { batchProcessorTools } from './storage/batch-processor';
 import { filesystemTools } from './filesystem/tools';
@@ -38,7 +40,9 @@ export const registry = new ToolRegistry();
   ...jitsiTools,
   ...notionTools,
   ...icsCalendarTools,
+  ...googleCalendarTools,
   ...fileStorageTools,
+  ...googleDriveTools,
   ...workspaceTools,
   ...batchProcessorTools,
   ...filesystemTools,
@@ -407,7 +411,9 @@ export * from './crm/attio';
 export * from './meetings/jitsi';
 export * from './docs/notion';
 export * from './calendar/ics';
+export * from './calendar/google';
 export * from './storage/files';
+export * from './storage/google-drive';
 export * from './storage/workspace';
 export * from './workspace-helper';
 export * from './code/github';

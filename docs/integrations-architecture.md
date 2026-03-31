@@ -491,7 +491,7 @@ CRM_PROVIDER=attio  # Default CRM
 import { Client } from '@notionhq/client';
 
 export const createNotionPageTool: MCPTool = {
-  name: 'create_notion_page',
+  name: 'notion_create_page',
   description: 'Create a new page in Notion',
   input_schema: {
     type: 'object',

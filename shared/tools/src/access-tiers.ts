@@ -32,9 +32,9 @@ const DEFAULT_ADMIN_ONLY_TOOLS = [
   'add_attio_note',
   'link_attio_person_company',
   // Docs tools - access to internal docs
-  'create_notion_page',
-  'update_notion_page',
-  'search_notion',
+  'notion_create_page',
+  'notion_update_page',
+  'notion_search',
   // Code tools - repo access
   'create_github_issue',
   'create_pull_request',

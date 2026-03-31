@@ -36,8 +36,8 @@ steps:
   # Update Notion current status page
   - name: update-notion
     agent: coordinator
-    action: update_notion_page
-    tool: append_to_notion_page
+    action: notion_append_blocks
+    tool: notion_append_blocks
     inputs:
       page_id: ${{ env.NOTION_CURRENT_STATUS_PAGE }}
       content: |

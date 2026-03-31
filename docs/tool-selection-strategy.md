@@ -17,9 +17,9 @@ const coreTools = [
   'update_attio_person',      // CRM
   'add_attio_note',            // CRM
   'create_jitsi_meeting',      // Meetings
-  'create_notion_page',        // Docs
-  'append_to_notion_page',     // Docs
-  'search_notion',             // Docs
+  'notion_create_page',        // Docs
+  'notion_append_blocks',      // Docs
+  'notion_search',             // Docs
   // ... 5-10 more
 ];
 ```

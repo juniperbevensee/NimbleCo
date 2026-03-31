@@ -247,7 +247,7 @@ export class UniversalAgent {
 
       // Filter out tools that require missing credentials
       const unconfiguredTools: string[] = [];
-      if (!context.credentials.notion_token) unconfiguredTools.push('search_notion', 'create_notion_page', 'append_to_notion_page', 'read_notion_page', 'create_notion_database');
+      if (!context.credentials.notion_token) unconfiguredTools.push('notion_search', 'notion_create_page', 'notion_append_blocks', 'notion_get_blocks', 'notion_create_database', 'notion_get_database', 'notion_query_database', 'notion_get_page', 'notion_update_page', 'notion_delete_block', 'notion_get_me', 'notion_list_users', 'notion_list_comments', 'notion_create_comment');
       if (!context.credentials.attio_token) unconfiguredTools.push('search_attio', 'create_attio_record', 'update_attio_record');
       if (!context.credentials.github_token) unconfiguredTools.push('github_list_repos', 'github_get_repo', 'github_create_issue', 'github_list_prs', 'github_get_pr');
 

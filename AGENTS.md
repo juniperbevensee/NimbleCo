@@ -113,7 +113,7 @@ Tool registry and execution:
 ### Tool Calling Format
 Agents output JSON to call tools:
 ```json
-{"tool": "search_notion", "input": {"query": "meeting notes"}}
+{"tool": "notion_search", "input": {"query": "meeting notes"}}
 ```
 
 The coordinator/agent parses this and executes via `executeToolCall()`.

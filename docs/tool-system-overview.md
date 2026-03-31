@@ -121,16 +121,30 @@ import { jitsiTools } from '@nimbleco/tools';
 
 **Note:** Zero API calls needed! Jitsi just generates URLs. We create ICS calendar files locally.
 
-### Docs: Notion (5 tools)
+### Docs: Notion (14 tools)
 
 ```typescript
 import { notionTools } from '@nimbleco/tools';
 
-// 1. create_notion_page - Create page with markdown content
-// 2. append_to_notion_page - Add to existing page
-// 3. search_notion - Search all pages
-// 4. read_notion_page - Get page content
-// 5. create_notion_database - Create database/table
+// Search & Discovery
+// 1. notion_search - Search pages and databases
+// Database Operations
+// 2. notion_get_database - Get database schema
+// 3. notion_query_database - Query with filters/sorts
+// 4. notion_create_database - Create database/table
+// Page Operations
+// 5. notion_get_page - Get page properties
+// 6. notion_get_blocks - Get page content blocks
+// 7. notion_create_page - Create page with content
+// 8. notion_update_page - Update page properties
+// 9. notion_append_blocks - Append content to page
+// 10. notion_delete_block - Delete/archive block or page
+// User & Workspace
+// 11. notion_get_me - Get bot user info
+// 12. notion_list_users - List workspace users
+// Comments
+// 13. notion_list_comments - List page comments
+// 14. notion_create_comment - Create comment/reply
 ```
 
 **Direct API access** - uses full Notion SDK, converts markdown to blocks, handles all page types
