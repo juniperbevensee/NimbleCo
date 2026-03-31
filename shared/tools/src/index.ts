@@ -16,6 +16,7 @@ import { batchProcessorTools } from './storage/batch-processor';
 import { filesystemTools } from './filesystem/tools';
 import { githubTools } from './code/github';
 import { webTools } from './web/fetch';
+import { webSearchTools } from './web/search';
 import { computeTools } from './compute/javascript';
 import { dataScienceTools } from './compute/data-science';
 import { advancedDataScienceTools } from './compute/data-science-advanced';
@@ -43,6 +44,7 @@ export const registry = new ToolRegistry();
   ...filesystemTools,
   ...githubTools,
   ...webTools,
+  ...webSearchTools,
   ...computeTools,
   ...dataScienceTools,
   ...advancedDataScienceTools,
