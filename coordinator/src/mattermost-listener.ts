@@ -778,8 +778,11 @@ Respond with ONLY one word: chat or task`;
   /**
    * Fetch the last message exchange in this channel for conversational context
    * Returns the most recent user message and Audrey's response (if any)
+   *
+   * NOTE: Uses retry logic to handle race condition where a concurrent request's
+   * assistant message INSERT may not have committed yet.
    */
-  private async getLastChannelExchange(channelId: string, currentPostId: string): Promise<{ user_message: string; user_id: string; assistant_response?: string } | null> {
+  private async getLastChannelExchange(channelId: string, currentPostId: string, retryCount = 0): Promise<{ user_message: string; user_id: string; assistant_response?: string } | null> {
     if (!this.logAllMessages) return null;
 
     try {
@@ -794,14 +797,15 @@ Respond with ONLY one word: chat or task`;
       const conversationId = convResult.rows[0]?.id;
       if (!conversationId) return null;
 
-      // Get the last 2 messages (user + assistant) excluding the current message
+      // Get the last 4 messages to better handle race conditions
+      // We may need more context to find the last complete exchange
       const messagesResult = await db.query(
         `
-        SELECT role, content, sender_id
+        SELECT role, content, sender_id, created_at
         FROM messages
         WHERE conversation_id = $1 AND event_id != $2
         ORDER BY created_at DESC
-        LIMIT 2
+        LIMIT 4
         `,
         [conversationId, currentPostId]
       );
@@ -814,6 +818,18 @@ Respond with ONLY one word: chat or task`;
       let assistantMessage = messages.find((m: any) => m.role === 'assistant');
 
       if (!userMessage) return null;
+
+      // Race condition detection: If we have a user message but no assistant response,
+      // and the user message is very recent (< 5 seconds old), the assistant response
+      // INSERT might still be in flight. Retry once after a short delay.
+      if (!assistantMessage && retryCount < 1) {
+        const messageAge = Date.now() - new Date(userMessage.created_at).getTime();
+        if (messageAge < 5000) { // Message is less than 5 seconds old
+          console.log(`   ⏳ Context race condition detected, waiting for assistant message...`);
+          await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms
+          return this.getLastChannelExchange(channelId, currentPostId, retryCount + 1);
+        }
+      }
 
       return {
         user_message: userMessage.content,
@@ -875,6 +891,7 @@ Respond with ONLY one word: chat or task`;
 
   /**
    * Log an assistant message to an existing conversation
+   * Uses RETURNING to ensure the INSERT is fully committed before returning.
    */
   private async logAssistantMessage(channelId: string, messageId: string, message: string) {
     if (!this.logAllMessages) return;
@@ -895,14 +912,19 @@ Respond with ONLY one word: chat or task`;
         return;
       }
 
-      // Insert assistant message
-      await db.query(
+      // Insert assistant message with RETURNING to ensure commit
+      const insertResult = await db.query(
         `
         INSERT INTO messages (conversation_id, role, content, event_id, sender_id, metadata)
         VALUES ($1, 'assistant', $2, $3, $4, $5)
+        RETURNING id
         `,
         [conversationId, message, messageId, this.botUserId, { channel_id: channelId }]
       );
+
+      if (insertResult.rowCount === 0) {
+        console.warn('⚠️  Assistant message INSERT returned no rows');
+      }
     } catch (error) {
       console.error('⚠️  Failed to log assistant message to database:', error);
       // Don't throw - message logging shouldn't break the bot
