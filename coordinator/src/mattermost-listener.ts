@@ -536,10 +536,17 @@ export class MattermostListener {
       // Fetch last channel exchange for conversational context (when not in a thread)
       let lastExchange: { user_message: string; user_id: string; assistant_response?: string } | null = null;
       if (!post.root_id) {
+        console.log(`   🔍 Fetching last exchange for channel ${post.channel_id.substring(0, 8)}...`);
         lastExchange = await this.getLastChannelExchange(post.channel_id, post.id);
         if (lastExchange) {
-          console.log(`   💬 Last exchange: "${lastExchange.user_message.substring(0, 50)}..."`);
+          console.log(`   💬 Last exchange found:`);
+          console.log(`      User msg: "${lastExchange.user_message.substring(0, 80)}..."`);
+          console.log(`      Assistant: ${lastExchange.assistant_response ? `"${lastExchange.assistant_response.substring(0, 80)}..."` : 'NONE'}`);
+        } else {
+          console.log(`   ⚠️  No last exchange found for this channel`);
         }
+      } else {
+        console.log(`   🧵 In thread ${post.root_id.substring(0, 8)}, skipping channel context`);
       }
 
       // Log user message to database
@@ -783,7 +790,10 @@ Respond with ONLY one word: chat or task`;
    * assistant message INSERT may not have committed yet.
    */
   private async getLastChannelExchange(channelId: string, currentPostId: string, retryCount = 0): Promise<{ user_message: string; user_id: string; assistant_response?: string } | null> {
-    if (!this.logAllMessages) return null;
+    if (!this.logAllMessages) {
+      console.log(`   [getLastChannelExchange] logAllMessages is disabled`);
+      return null;
+    }
 
     try {
       const db = this.getDB();
@@ -795,7 +805,11 @@ Respond with ONLY one word: chat or task`;
       );
 
       const conversationId = convResult.rows[0]?.id;
-      if (!conversationId) return null;
+      if (!conversationId) {
+        console.log(`   [getLastChannelExchange] No conversation found for channel ${channelId.substring(0, 8)}`);
+        return null;
+      }
+      console.log(`   [getLastChannelExchange] Found conversation ${conversationId.substring(0, 8)} for channel`);
 
       // Get the last 4 messages to better handle race conditions
       // We may need more context to find the last complete exchange
@@ -810,14 +824,26 @@ Respond with ONLY one word: chat or task`;
         [conversationId, currentPostId]
       );
 
-      if (messagesResult.rows.length === 0) return null;
+      console.log(`   [getLastChannelExchange] Found ${messagesResult.rows.length} messages in conversation`);
+      if (messagesResult.rows.length === 0) {
+        console.log(`   [getLastChannelExchange] No messages found (excluding current post)`);
+        return null;
+      }
+
+      // Log what we found for debugging
+      for (const msg of messagesResult.rows) {
+        console.log(`   [getLastChannelExchange] - ${msg.role}: "${(msg.content || '').substring(0, 50)}..."`);
+      }
 
       // Find the most recent user message and optional assistant response
       const messages = messagesResult.rows;
       let userMessage = messages.find((m: any) => m.role === 'user');
       let assistantMessage = messages.find((m: any) => m.role === 'assistant');
 
-      if (!userMessage) return null;
+      if (!userMessage) {
+        console.log(`   [getLastChannelExchange] No user message found in recent messages`);
+        return null;
+      }
 
       // Race condition detection: If we have a user message but no assistant response,
       // and the user message is very recent (< 5 seconds old), the assistant response
@@ -894,7 +920,12 @@ Respond with ONLY one word: chat or task`;
    * Uses RETURNING to ensure the INSERT is fully committed before returning.
    */
   private async logAssistantMessage(channelId: string, messageId: string, message: string) {
-    if (!this.logAllMessages) return;
+    console.log(`📝 [logAssistantMessage] Logging assistant message to channel ${channelId.substring(0, 8)}...`);
+
+    if (!this.logAllMessages) {
+      console.log(`📝 [logAssistantMessage] SKIPPED - logAllMessages is disabled`);
+      return;
+    }
 
     try {
       const db = this.getDB();
@@ -908,9 +939,11 @@ Respond with ONLY one word: chat or task`;
       const conversationId = convResult.rows[0]?.id;
 
       if (!conversationId) {
-        console.warn('⚠️  No conversation found for assistant message logging');
+        console.warn('⚠️  [logAssistantMessage] No conversation found for channel - cannot log assistant message');
         return;
       }
+
+      console.log(`📝 [logAssistantMessage] Found conversation ${conversationId.substring(0, 8)}`);
 
       // Insert assistant message with RETURNING to ensure commit
       const insertResult = await db.query(
@@ -923,10 +956,12 @@ Respond with ONLY one word: chat or task`;
       );
 
       if (insertResult.rowCount === 0) {
-        console.warn('⚠️  Assistant message INSERT returned no rows');
+        console.warn('⚠️  [logAssistantMessage] INSERT returned no rows');
+      } else {
+        console.log(`📝 [logAssistantMessage] SUCCESS - logged assistant message ${insertResult.rows[0].id.substring(0, 8)}`);
       }
     } catch (error) {
-      console.error('⚠️  Failed to log assistant message to database:', error);
+      console.error('⚠️  [logAssistantMessage] Failed to log assistant message:', error);
       // Don't throw - message logging shouldn't break the bot
     }
   }
