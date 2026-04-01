@@ -358,15 +358,34 @@ class Coordinator {
     console.log('🎯 Orchestrator handling task directly');
 
     const description = task.payload?.description || JSON.stringify(task.payload);
+    // Build credentials from environment variables
+    // Use the exact env var names that tools expect (e.g., NOTION_API_KEY, not notion_token)
+    const credentials: Record<string, string> = {};
+    const credentialEnvVars = [
+      'GITHUB_TOKEN',
+      'NOTION_API_KEY',
+      'ATTIO_API_KEY',
+      'OPEN_MEASURES_API_KEY',
+      'OPEN_MEASURES_REFRESH_TOKEN',
+      'GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY',
+      'GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY',
+      'BRAVE_SEARCH_API_KEY',
+      'HELIUS_API_KEY',
+      'COINGECKO_API_KEY',
+      'DEHASHED_API_KEY',
+      'MATTERMOST_URL',
+      'MATTERMOST_BOT_TOKEN',
+    ];
+    for (const envVar of credentialEnvVars) {
+      if (process.env[envVar]) {
+        credentials[envVar] = process.env[envVar]!;
+      }
+    }
+
     const context: ToolContext = {
       user_id: task.payload?.matrix_user || task.payload?.mattermost_user || 'orchestrator',
       platform: 'matrix',
-      credentials: {
-        github_token: process.env.GITHUB_TOKEN || '',
-        notion_token: process.env.NOTION_API_KEY || '',
-        attio_token: process.env.ATTIO_API_KEY || '',
-        open_measures_api_key: process.env.OPEN_MEASURES_API_KEY || '',
-      },
+      credentials,
       room_id: task.payload?.matrix_room || task.payload?.mattermost_channel,
     };
 

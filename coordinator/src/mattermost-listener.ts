@@ -872,7 +872,11 @@ Respond with ONLY one word: chat or task`;
    * Log a message to the database for conversation history
    */
   private async logMessage(post: Post, role: 'user' | 'assistant', message: string) {
-    if (!this.logAllMessages) return;
+    console.log(`📝 [logMessage] Logging ${role} message to channel ${post.channel_id.substring(0, 8)}...`);
+    if (!this.logAllMessages) {
+      console.log(`📝 [logMessage] SKIPPED - logAllMessages is disabled`);
+      return;
+    }
 
     try {
       const db = this.getDB();
@@ -909,8 +913,9 @@ Respond with ONLY one word: chat or task`;
         `,
         [conversationId, role, message, post.id, role === 'user' ? post.user_id : this.botUserId, { channel_id: post.channel_id }]
       );
+      console.log(`📝 [logMessage] SUCCESS - logged ${role} message to conversation ${conversationId.substring(0, 8)}`);
     } catch (error) {
-      console.error('⚠️  Failed to log message to database:', error);
+      console.error(`📝 [logMessage] FAILED - ${error}`);
       // Don't throw - message logging shouldn't break the bot
     }
   }
