@@ -13,6 +13,8 @@ export interface ToolContext {
   agent_id?: string;
   // Unique invocation ID for tracking tool calls
   invocation_id?: string;
+  // Admin status for access tier filtering
+  is_admin?: boolean;
 }
 
 export interface Tool {

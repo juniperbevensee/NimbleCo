@@ -41,6 +41,7 @@ interface AgentTask {
   swarm_roster?: SwarmAgent[]; // Other agents in the swarm
   swarm_mode?: string; // e.g. 'conversation' — affects tool use and iteration limits
   max_turns?: number; // Max conversation turns for swarm interactions
+  is_admin?: boolean; // Whether triggering user is admin (for tool access tiers)
 }
 
 interface SwarmAgent {
@@ -227,20 +228,22 @@ export class UniversalAgent {
         attio_token: process.env.ATTIO_API_KEY || '',
         open_measures_api_key: process.env.OPEN_MEASURES_API_KEY || '',
       },
+      is_admin: task.is_admin || false,
     };
 
     // Determine which tools to use
-    // Conversation-mode swarm agents receive the full transcript in their instructions
-    // and only need to generate a response — tools just add latency and risk timeout.
-    const isConversationModeForTools = task.swarm_mode === 'conversation';
     let tools: Tool[];
-    if (isConversationModeForTools && (!task.tools || task.tools.length === 0)) {
-      tools = [];
-      console.log(`🔧 Conversation mode: skipping tools (not needed for transcript response)`);
-    } else if (task.tools && task.tools.length > 0) {
-      // Use specified tools
+    if (task.tools && task.tools.length > 0) {
+      // Use explicitly specified tools
       tools = task.tools.map(name => toolRegistry.getTool(name)).filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined);
       console.log(`🔧 Using ${tools.length} specified tools`);
+    } else if (task.swarm_mode) {
+      // Swarm agent: use filtered tool set
+      const { getToolsForSwarmAgent } = await import('@nimbleco/tools');
+      const isAdmin = task.is_admin || false;
+      const swarmMode = task.swarm_mode as 'parallel' | 'conversation';
+      tools = getToolsForSwarmAgent(task.instructions, swarmMode, isAdmin);
+      console.log(`🔧 Swarm (${task.swarm_mode}): ${tools.length} filtered tools available`);
     } else {
       // Auto-select tools based on task
       tools = getToolsForTask(task.instructions);
@@ -406,6 +409,12 @@ FORMAT RULES:
           );
 
           console.log(`  ✓ Tool executed successfully`);
+
+          // Log swarm tool usage for analytics
+          if (task.swarm_mode) {
+            const swarmDepth = (task as any).swarm_depth || 0;
+            console.log(`  [SWARM-TOOL] ${task.swarm_mode} | ${toolCall.tool} | depth:${swarmDepth}`);
+          }
 
           // Add to conversation
           messages.push({

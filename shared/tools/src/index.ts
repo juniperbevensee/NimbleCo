@@ -456,6 +456,67 @@ export function getToolsForTaskWithAccessTier(
 }
 
 /**
+ * Get tools for a swarm agent with appropriate filtering
+ *
+ * Swarm agents are backend workers that:
+ * - Can use research tools (category: 'research') and other configured tools
+ * - Can use inter-agent communication in parallel mode
+ * - CANNOT post to Mattermost (coordinator handles that)
+ *
+ * @param taskDescription - The task for swarm agent
+ * @param swarmMode - 'parallel' | 'conversation'
+ * @param isAdmin - Whether triggering user is admin
+ * @see docs/swarm-tool-filtering.md for policy details
+ */
+export function getToolsForSwarmAgent(
+  taskDescription: string,
+  swarmMode: 'parallel' | 'conversation',
+  isAdmin: boolean
+): Tool[] {
+  // Start with standard task-based selection + existing filters
+  const allTools = getToolsForTaskWithAccessTier(taskDescription, isAdmin);
+
+  // Blocklist: Never available to swarm agents
+  const swarmBlocklist = new Set([
+    'post_mattermost_message_with_attachment',
+    'add_mattermost_reaction',
+  ]);
+
+  let filtered = allTools.filter(tool => {
+    // Block Mattermost posting
+    if (swarmBlocklist.has(tool.name)) {
+      return false;
+    }
+
+    // Inter-agent messaging only needed in parallel mode
+    // (conversation mode uses transcript for coordination)
+    if (swarmMode === 'conversation' && tool.name === 'send_message_to_agent') {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Ensure research tools included for parallel mode
+  if (swarmMode === 'parallel') {
+    const researchTools = registry.getByCategory('research');
+    const existingNames = new Set(filtered.map(t => t.name));
+
+    researchTools.forEach(tool => {
+      if (!existingNames.has(tool.name) && !swarmBlocklist.has(tool.name)) {
+        const configured = filterConfiguredTools([tool]);
+        const tierFiltered = filterToolsByAccessTier(configured, isAdmin);
+        if (tierFiltered.length > 0) {
+          filtered.push(tierFiltered[0]);
+        }
+      }
+    });
+  }
+
+  return filtered;
+}
+
+/**
  * Get the appropriate LLM model for a user
  * Admins may get a more powerful model (e.g., Opus vs Sonnet)
  */

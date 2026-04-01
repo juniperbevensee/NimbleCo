@@ -1260,6 +1260,7 @@ Example parallel swarm:
         instructions: agent.instructions,
         swarm_roster: swarmRoster.filter((_, i) => i !== idx),
         swarm_mode: 'parallel',
+        is_admin: isAdmin,
       }, { triggerUserId, isAdmin, swarmDepth }))
     );
 
@@ -1420,6 +1421,7 @@ Keep your response focused and conversational (2-4 paragraphs max).`;
             swarm_mode: 'conversation',
             current_round: round + 1,
             max_turns: maxTurns,
+            is_admin: isAdmin,
           }, { triggerUserId, isAdmin, swarmDepth, timeout: 120000 });
 
           if (result.status === 'success' && result.result) {
