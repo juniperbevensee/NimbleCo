@@ -30,8 +30,9 @@ import {
   getToolsForTask,
   ToolContext,
   filterToolsByPolicy,
-  AllowAllPolicyClient
+  PolicyClient,
 } from '@nimbleco/tools';
+import { createPolicyClient } from './policy-factory';
 import { checkCircuitBreaker, checkInvocationLimit } from './rate-limiter';
 
 // Load .env from project root
@@ -91,10 +92,14 @@ class Coordinator {
   private processedTasks: Set<string> = new Set();
   private publishedMessages: Set<string> = new Set(); // Track published messages to prevent duplicates
   private botId: string;
+  private policyClient: PolicyClient;
 
   constructor() {
     // Get bot ID from environment (defaults to 'default' for single-bot setups)
     this.botId = process.env.BOT_ID || 'default';
+
+    // Initialize policy client based on environment configuration
+    this.policyClient = createPolicyClient();
 
     // Initialize LLM router with cost limit
     const dailyLimit = parseFloat(process.env.LLM_DAILY_COST_LIMIT || '10');
@@ -410,7 +415,6 @@ class Coordinator {
     // Policy-based tool filtering (optional, fails safe to allow-all)
     // This filters the tool schema BEFORE sending to LLM to reduce context window
     // and prevent LLM from attempting to use unauthorized tools
-    const policyClient = new AllowAllPolicyClient(); // TODO: Make this configurable
     const toolContext: ToolContext = {
       user_id: task.payload?.mattermost_user || task.payload?.matrix_user || 'unknown',
       platform: task.payload?.mattermost_channel ? 'mattermost' : 'matrix',
@@ -420,7 +424,7 @@ class Coordinator {
     };
 
     try {
-      tools = await filterToolsByPolicy(tools, toolContext, policyClient);
+      tools = await filterToolsByPolicy(tools, toolContext, this.policyClient);
       console.log(`🔐 Policy filtering applied (${tools.length} tools allowed)`);
     } catch (error) {
       console.warn(`⚠️  Policy filtering failed, using all tools:`, error);
@@ -761,7 +765,7 @@ User's request: ${description}`;
             toolCall.input,
             context,
             task.payload, // Pass payload for permission checks
-            policyClient // Pass policy client for execution guard
+            this.policyClient // Pass policy client for execution guard
           );
 
           console.log(`  ✓ Tool result:`, JSON.stringify(toolResult).substring(0, 200));
@@ -870,7 +874,7 @@ User's request: ${description}`;
                 },
                 attachContext,
                 undefined, // No taskPayload needed here
-                policyClient // Pass policy client for execution guard
+                this.policyClient // Pass policy client for execution guard
               );
 
               // Link the response post to the invocation for reaction tracking
