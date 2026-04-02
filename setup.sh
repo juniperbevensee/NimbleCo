@@ -891,6 +891,64 @@ if [ "$SETUP_MATTERMOST" = "true" ]; then
     fi
 
     echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Direct Message (DM) Access Control${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "For security, you can restrict who can DM the bot."
+    echo ""
+    echo "Options:"
+    echo -e "  • ${GREEN}Block DMs (recommended)${NC} - Only allow specific users"
+    echo "  • Allow all DMs - Anyone can message the bot privately"
+    echo ""
+
+    # Default BLOCK_DMS to true
+    MATTERMOST_BLOCK_DMS=${MATTERMOST_BLOCK_DMS:-true}
+
+    if confirm "Block DMs (require allowlist)?" "y"; then
+        MATTERMOST_BLOCK_DMS="true"
+
+        # Default allowed users to admin users if they were configured
+        if [ -n "$MATTERMOST_ADMIN_USERS" ]; then
+            MATTERMOST_ALLOWED_USERS=${MATTERMOST_ALLOWED_USERS:-$MATTERMOST_ADMIN_USERS}
+            echo ""
+            echo -e "${GREEN}✓${NC} Admin users automatically allowed for DMs"
+            echo -e "     ${BLUE}$MATTERMOST_ADMIN_USERS${NC}"
+            echo ""
+
+            if confirm "Allow additional users for DMs?" "n"; then
+                echo ""
+                echo "Enter additional Mattermost user IDs (comma-separated)."
+                echo "These users can DM the bot but won't have admin privileges."
+                echo ""
+                read -p "Additional DM-allowed user IDs: " ADDITIONAL_ALLOWED_USERS
+
+                if [ -n "$ADDITIONAL_ALLOWED_USERS" ]; then
+                    MATTERMOST_ALLOWED_USERS="$MATTERMOST_ALLOWED_USERS,$ADDITIONAL_ALLOWED_USERS"
+                fi
+            fi
+        else
+            # No admin users configured, ask for allowed users
+            echo ""
+            echo "Enter Mattermost user IDs allowed to DM (comma-separated)."
+            echo "Find user IDs in Mattermost: Profile → Advanced → User ID"
+            echo ""
+            read -p "DM-allowed user IDs: " MATTERMOST_ALLOWED_USERS
+        fi
+
+        if [ -n "$MATTERMOST_ALLOWED_USERS" ]; then
+            echo -e "${GREEN}✓${NC} DMs allowed for: $MATTERMOST_ALLOWED_USERS"
+            echo -e "${YELLOW}ℹ${NC}  Non-whitelisted users will get a polite error message"
+        else
+            echo -e "${YELLOW}⚠${NC}  No users whitelisted - DMs will be blocked for everyone"
+        fi
+    else
+        MATTERMOST_BLOCK_DMS="false"
+        MATTERMOST_ALLOWED_USERS=""
+        echo -e "${YELLOW}⚠${NC}  DMs allowed for all users (not recommended for production)"
+    fi
+
+    echo ""
     echo -e "${GREEN}✓${NC} Mattermost configuration complete!"
 fi
 
@@ -1021,7 +1079,7 @@ echo ""
 CUSTOM_VARS=""
 if [ -f .env ]; then
     # Known vars that setup manages
-    KNOWN_VARS="NATS_URL|DATABASE_URL|OLLAMA_URL|LLM_MODEL_QUICK|LLM_MODEL_CODE|LLM_DAILY_COST_LIMIT|ANTHROPIC_API_KEY|ANTHROPIC_MODEL|GOOGLE_CLOUD_API_KEY|GOOGLE_MODEL|GOOGLE_MAX_OUTPUT_TOKENS|VERTEX_AI_PROJECT|VERTEX_AI_LOCATION|AWS_REGION|BEDROCK_MODEL_ID|AWS_BEARER_TOKEN_BEDROCK|MATTERMOST_URL|MATTERMOST_BOT_TOKEN|MATTERMOST_CHANNEL|MATTERMOST_ADMIN_USERS|MATTERMOST_LOG_ALL_MESSAGES|GITHUB_TOKEN|ATTIO_API_KEY|NOTION_API_KEY|STORAGE_PATH|CALENDAR_STORAGE_PATH|MINIO_ENDPOINT|MINIO_BUCKET|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|RATE_LIMIT_MAX_REQUESTS|RATE_LIMIT_WINDOW_MS|AGENT_MAX_RETRIES|AGENT_TIMEOUT_MS|DASHBOARD_ENABLED"
+    KNOWN_VARS="NATS_URL|DATABASE_URL|OLLAMA_URL|LLM_MODEL_QUICK|LLM_MODEL_CODE|LLM_DAILY_COST_LIMIT|ANTHROPIC_API_KEY|ANTHROPIC_MODEL|GOOGLE_CLOUD_API_KEY|GOOGLE_MODEL|GOOGLE_MAX_OUTPUT_TOKENS|VERTEX_AI_PROJECT|VERTEX_AI_LOCATION|AWS_REGION|BEDROCK_MODEL_ID|AWS_BEARER_TOKEN_BEDROCK|MATTERMOST_URL|MATTERMOST_BOT_TOKEN|MATTERMOST_CHANNEL|MATTERMOST_ADMIN_USERS|MATTERMOST_ALLOWED_USERS|MATTERMOST_BLOCK_DMS|MATTERMOST_LOG_ALL_MESSAGES|GITHUB_TOKEN|ATTIO_API_KEY|NOTION_API_KEY|STORAGE_PATH|CALENDAR_STORAGE_PATH|MINIO_ENDPOINT|MINIO_BUCKET|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|RATE_LIMIT_MAX_REQUESTS|RATE_LIMIT_WINDOW_MS|AGENT_MAX_RETRIES|AGENT_TIMEOUT_MS|DASHBOARD_ENABLED"
 
     # Extract lines that aren't comments, empty, or known vars
     CUSTOM_VARS=$(grep -v "^#" .env | grep -v "^$" | grep -Ev "^($KNOWN_VARS)=" || true)
@@ -1060,6 +1118,8 @@ MATTERMOST_URL=${MATTERMOST_URL}
 MATTERMOST_BOT_TOKEN=${MATTERMOST_BOT_TOKEN}
 MATTERMOST_CHANNEL=${MATTERMOST_CHANNEL}
 MATTERMOST_ADMIN_USERS=${MATTERMOST_ADMIN_USERS}
+MATTERMOST_ALLOWED_USERS=${MATTERMOST_ALLOWED_USERS}
+MATTERMOST_BLOCK_DMS=${MATTERMOST_BLOCK_DMS}
 MATTERMOST_LOG_ALL_MESSAGES=true
 
 # GitHub
@@ -1432,6 +1492,8 @@ echo "MATTERMOST_BOT_TOKEN=$MATTERMOST_BOT_TOKEN" >> .setup-last-session
 echo "MATTERMOST_URL=$MATTERMOST_URL" >> .setup-last-session
 echo "MATTERMOST_CHANNEL=$MATTERMOST_CHANNEL" >> .setup-last-session
 echo "MATTERMOST_ADMIN_USERS=$MATTERMOST_ADMIN_USERS" >> .setup-last-session
+echo "MATTERMOST_ALLOWED_USERS=$MATTERMOST_ALLOWED_USERS" >> .setup-last-session
+echo "MATTERMOST_BLOCK_DMS=$MATTERMOST_BLOCK_DMS" >> .setup-last-session
 echo "ATTIO_API_KEY=$ATTIO_API_KEY" >> .setup-last-session
 echo "NOTION_API_KEY=$NOTION_API_KEY" >> .setup-last-session
 echo "MINIO_ENDPOINT=$MINIO_ENDPOINT" >> .setup-last-session

@@ -324,6 +324,8 @@ DATABASE_URL=postgresql://agent:password@localhost:5432/nimbleco
 MATTERMOST_URL=https://mattermost.example.com
 MATTERMOST_BOT_TOKEN=your-bot-token
 MATTERMOST_ADMIN_USERS=user_id_1,user_id_2
+MATTERMOST_ALLOWED_USERS=user_id_1,user_id_2,user_id_3  # Users who can DM the bot
+MATTERMOST_BLOCK_DMS=true                               # Block DMs from non-whitelisted users (recommended)
 MATTERMOST_LOG_ALL_MESSAGES=true
 
 # LLM Providers (add any/all you want to use)
