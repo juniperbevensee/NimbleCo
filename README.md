@@ -350,7 +350,7 @@ MINIO_SECRET_KEY=minioadmin
 
 # Policy Enforcement (optional - Swarm-Map integration)
 # If not set, allows all tools (standalone mode)
-POLICY_CHECK_URL=http://localhost:3001  # Swarm-Map gateway URL
+POLICY_CHECK_URL=http://localhost:4000  # Swarm-Map gateway URL (default port)
 POLICY_CHECK_TIMEOUT=5000               # Timeout in ms (default: 5000)
 POLICY_CHECK_DEBUG=false                # Enable debug logging (default: false)
 ```

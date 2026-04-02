@@ -50,7 +50,7 @@ Add these to your `.env` file to enable policy enforcement:
 
 ```bash
 # Policy Enforcement (optional)
-POLICY_CHECK_URL=http://localhost:3001  # Swarm-Map gateway URL
+POLICY_CHECK_URL=http://localhost:4000  # Swarm-Map gateway URL (default port)
 POLICY_CHECK_TIMEOUT=5000               # Timeout in ms (default: 5000)
 POLICY_CHECK_DEBUG=false                # Enable debug logging (default: false)
 ```
@@ -91,7 +91,7 @@ cp .env.example .env
 npm run gateway
 ```
 
-Swarm-Map gateway will start on `http://localhost:3001` by default.
+Swarm-Map gateway will start on `http://localhost:4000` by default (configurable via `GATEWAY_PORT` environment variable).
 
 ### 2. Import NimbleCo Agent
 
@@ -203,7 +203,7 @@ npm test -- policy-e2e.test.ts
 2. Configure NimbleCo:
    ```bash
    cd /path/to/NimbleCo
-   echo "POLICY_CHECK_URL=http://localhost:3001" >> .env
+   echo "POLICY_CHECK_URL=http://localhost:4000" >> .env
    echo "POLICY_CHECK_DEBUG=true" >> .env
    ```
 
@@ -216,7 +216,7 @@ npm test -- policy-e2e.test.ts
 
 5. Check logs for policy decisions:
    ```
-   🔐 Policy enforcement enabled: http://localhost:3001
+   🔐 Policy enforcement enabled: http://localhost:4000
    [HttpPolicyClient] checkBatchAccess(15 tools): 15 results, 12 allowed
    🔐 Policy filtering applied (12 tools allowed)
    ```
@@ -233,7 +233,7 @@ npm test -- policy-e2e.test.ts
 - Network connectivity issues
 
 **Resolution**:
-1. Verify Swarm-Map is running: `curl http://localhost:3001/api/policy/health`
+1. Verify Swarm-Map is running: `curl http://localhost:4000/api/policy/health`
 2. Check `POLICY_CHECK_URL` matches gateway URL
 3. NimbleCo will **fail-open** (allow all tools) until service is reachable
 
@@ -334,10 +334,10 @@ Use different policy services for different bot personas:
 
 ```bash
 # .env.personal
-POLICY_CHECK_URL=http://localhost:3001
+POLICY_CHECK_URL=http://localhost:4000
 
 # .env.osint
-POLICY_CHECK_URL=http://localhost:3002
+POLICY_CHECK_URL=http://localhost:4001
 
 # .env.cryptid (no policy enforcement)
 # POLICY_CHECK_URL not set
