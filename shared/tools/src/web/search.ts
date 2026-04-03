@@ -9,6 +9,7 @@
  */
 
 import { Tool } from '../base';
+import { InputSanitizer } from '../sanitization';
 
 const BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search';
 const MAX_RESULTS = 10;
@@ -45,20 +46,27 @@ ${content}
 }
 
 /**
- * Sanitize and truncate text to prevent token exhaustion
+ * Sanitize and truncate text to prevent prompt injection and token exhaustion
  */
 function sanitizeSnippet(text: string | undefined, maxLength: number = MAX_SNIPPET_LENGTH): string {
   if (!text) return '';
-  // Remove potential injection attempts (HTML tags, control chars)
-  const cleaned = text
-    .replace(/<[^>]*>/g, '')  // Strip HTML
-    .replace(/[\x00-\x1f]/g, ' ')  // Remove control characters
-    .trim();
 
-  if (cleaned.length > maxLength) {
-    return cleaned.substring(0, maxLength) + '...';
+  // Use InputSanitizer for comprehensive protection
+  const result = InputSanitizer.sanitize(text, {
+    stripHtml: true,
+    removeControlChars: true,
+    removeZeroWidth: true,
+    normalizeUnicode: true,
+    detectSuspiciousPatterns: true,
+    maxLength,
+  });
+
+  // Log if suspicious content detected
+  if (result.flagged) {
+    console.warn('🚨 Suspicious web search result:', result.flags);
   }
-  return cleaned;
+
+  return result.sanitized;
 }
 
 /**

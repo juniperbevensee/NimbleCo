@@ -20,7 +20,22 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://agent:password@localhost:5432/nimbleco',
 });
 
-app.use(cors());
+// CORS: Only allow localhost origins
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // Allow localhost on any port
+    if (origin.match(/^https?:\/\/localhost(:\d+)?$/)) {
+      return callback(null, true);
+    }
+
+    // Deny all other origins
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 // Serve static files from the built frontend
@@ -36,9 +51,8 @@ app.get('/api/invocations/stats', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
     const botId = req.query.bot_id as string | undefined;
-    const botFilter = botId ? `AND bot_id = '${botId}'` : '';
 
-    const query = `
+    let query = `
       SELECT
         DATE(started_at) as date,
         COUNT(*) as total_invocations,
@@ -50,12 +64,21 @@ app.get('/api/invocations/stats', async (req, res) => {
         SUM(total_cost_usd) as total_cost_usd,
         AVG(duration_ms) as avg_duration_ms
       FROM invocations
-      WHERE started_at >= NOW() - INTERVAL '${days} days' ${botFilter}
-      GROUP BY DATE(started_at)
-      ORDER BY date DESC
+      WHERE started_at >= NOW() - INTERVAL '1 day' * $1
     `;
 
-    const result = await pool.query(query);
+    const params: any[] = [days];
+    let paramCount = 2;
+
+    if (botId) {
+      query += ` AND bot_id = $${paramCount}`;
+      params.push(botId);
+      paramCount++;
+    }
+
+    query += ` GROUP BY DATE(started_at) ORDER BY date DESC`;
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching invocation stats:', error);
@@ -68,9 +91,8 @@ app.get('/api/invocations/users', async (req, res) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
     const botId = req.query.bot_id as string | undefined;
-    const botFilter = botId ? `AND bot_id = '${botId}'` : '';
 
-    const query = `
+    let query = `
       SELECT
         trigger_user_id,
         COUNT(*) as total_invocations,
@@ -82,12 +104,21 @@ app.get('/api/invocations/users', async (req, res) => {
         AVG(duration_ms) as avg_duration_ms,
         MAX(started_at) as last_invocation_at
       FROM invocations
-      WHERE started_at >= NOW() - INTERVAL '${days} days' ${botFilter}
-      GROUP BY trigger_user_id
-      ORDER BY total_invocations DESC
+      WHERE started_at >= NOW() - INTERVAL '1 day' * $1
     `;
 
-    const result = await pool.query(query);
+    const params: any[] = [days];
+    let paramCount = 2;
+
+    if (botId) {
+      query += ` AND bot_id = $${paramCount}`;
+      params.push(botId);
+      paramCount++;
+    }
+
+    query += ` GROUP BY trigger_user_id ORDER BY total_invocations DESC`;
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching user stats:', error);
@@ -326,12 +357,12 @@ app.get('/api/tools/stats', async (req, res) => {
         AVG(duration_ms) as avg_duration_ms,
         MAX(started_at) as last_used_at
       FROM tool_calls
-      WHERE started_at >= NOW() - INTERVAL '${days} days'
+      WHERE started_at >= NOW() - INTERVAL '1 day' * $1
       GROUP BY tool_name
       ORDER BY total_calls DESC
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, [days]);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching tool stats:', error);
@@ -354,12 +385,12 @@ app.get('/api/llm/stats', async (req, res) => {
         SUM(cost_usd) as total_cost_usd,
         AVG(duration_ms) as avg_duration_ms
       FROM llm_calls
-      WHERE started_at >= NOW() - INTERVAL '${days} days'
+      WHERE started_at >= NOW() - INTERVAL '1 day' * $1
       GROUP BY provider, model
       ORDER BY total_calls DESC
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, [days]);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching LLM stats:', error);
@@ -416,22 +447,29 @@ app.get('/api/bots', async (req, res) => {
 app.get('/api/system/metrics', async (req, res) => {
   try {
     const botId = req.query.bot_id as string | undefined;
-    const botFilter = botId ? `AND bot_id = '${botId}'` : '';
 
     const queries = {
-      totalInvocations: `SELECT COUNT(*) as count FROM invocations WHERE 1=1 ${botFilter}`,
-      todayInvocations: `SELECT COUNT(*) as count FROM invocations WHERE DATE(started_at) = CURRENT_DATE ${botFilter}`,
+      totalInvocations: botId
+        ? `SELECT COUNT(*) as count FROM invocations WHERE bot_id = $1`
+        : `SELECT COUNT(*) as count FROM invocations`,
+      todayInvocations: botId
+        ? `SELECT COUNT(*) as count FROM invocations WHERE DATE(started_at) = CURRENT_DATE AND bot_id = $1`
+        : `SELECT COUNT(*) as count FROM invocations WHERE DATE(started_at) = CURRENT_DATE`,
       activeAgents: `SELECT COUNT(*) as count FROM agents WHERE status = 'active'`,
-      totalCostToday: `SELECT COALESCE(SUM(total_cost_usd), 0) as cost FROM invocations WHERE DATE(started_at) = CURRENT_DATE ${botFilter}`,
-      avgResponseTime: `SELECT AVG(duration_ms) as avg_ms FROM invocations WHERE completed_at >= NOW() - INTERVAL '1 hour' ${botFilter}`,
+      totalCostToday: botId
+        ? `SELECT COALESCE(SUM(total_cost_usd), 0) as cost FROM invocations WHERE DATE(started_at) = CURRENT_DATE AND bot_id = $1`
+        : `SELECT COALESCE(SUM(total_cost_usd), 0) as cost FROM invocations WHERE DATE(started_at) = CURRENT_DATE`,
+      avgResponseTime: botId
+        ? `SELECT AVG(duration_ms) as avg_ms FROM invocations WHERE completed_at >= NOW() - INTERVAL '1 hour' AND bot_id = $1`
+        : `SELECT AVG(duration_ms) as avg_ms FROM invocations WHERE completed_at >= NOW() - INTERVAL '1 hour'`,
     };
 
     const results = await Promise.all([
-      pool.query(queries.totalInvocations),
-      pool.query(queries.todayInvocations),
+      botId ? pool.query(queries.totalInvocations, [botId]) : pool.query(queries.totalInvocations),
+      botId ? pool.query(queries.todayInvocations, [botId]) : pool.query(queries.todayInvocations),
       pool.query(queries.activeAgents),
-      pool.query(queries.totalCostToday),
-      pool.query(queries.avgResponseTime),
+      botId ? pool.query(queries.totalCostToday, [botId]) : pool.query(queries.totalCostToday),
+      botId ? pool.query(queries.avgResponseTime, [botId]) : pool.query(queries.avgResponseTime),
     ]);
 
     res.json({
@@ -475,11 +513,13 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-app.listen(port, () => {
-  console.log(`Dashboard server running on http://localhost:${port}`);
-  console.log(`Frontend: http://localhost:${port}`);
-  console.log(`API: http://localhost:${port}/api/*`);
+// Bind to localhost only for security
+app.listen(port, '127.0.0.1', () => {
+  console.log(`Dashboard server running on http://127.0.0.1:${port}`);
+  console.log(`Frontend: http://127.0.0.1:${port}`);
+  console.log(`API: http://127.0.0.1:${port}/api/*`);
   console.log(`Database: ${process.env.DATABASE_URL?.replace(/:[^:@]+@/, ':****@') || 'Not configured'}`);
+  console.log(`Security: Bound to 127.0.0.1 (localhost only)`);
 });
 
 // Graceful shutdown

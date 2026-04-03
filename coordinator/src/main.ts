@@ -76,6 +76,12 @@ interface Task {
 // Maximum allowed swarm depth to prevent infinite recursion
 const MAX_SWARM_DEPTH = 2;
 
+// Maximum number of agents in a swarm (parallel or conversation)
+const MAX_SWARM_SIZE = 5;
+
+// Maximum conversation turns per agent
+const MAX_CONVERSATION_TURNS = 5;
+
 interface AgentResponse {
   agent_id: string;
   status: 'success' | 'failure';
@@ -1120,8 +1126,8 @@ User's request: ${description}`;
 
 Return a JSON object with:
 - mode: "parallel" (agents work independently) or "conversation" (agents talk to each other)
-- max_turns: number of conversation turns if mode is "conversation" (default: 3)
-- agents: array of agents to spawn
+- max_turns: number of conversation turns if mode is "conversation" (default: 3, max: 5)
+- agents: array of agents to spawn (max: 5 agents)
 
 Each agent should have:
 - type: "security" | "code-review" | "test-runner" | "custom"
@@ -1186,9 +1192,21 @@ Example parallel swarm:
         return;
       }
 
-      const agents = swarmConfig.agents || [];
+      let agents = swarmConfig.agents || [];
       const mode = swarmConfig.mode || 'parallel';
-      const maxTurns = swarmConfig.max_turns || 3;
+      let maxTurns = swarmConfig.max_turns || 3;
+
+      // Enforce swarm size limit
+      if (agents.length > MAX_SWARM_SIZE) {
+        console.log(`⚠️  Requested ${agents.length} agents, capping at ${MAX_SWARM_SIZE}`);
+        agents = agents.slice(0, MAX_SWARM_SIZE);
+      }
+
+      // Enforce conversation turns limit
+      if (mode === 'conversation' && maxTurns > MAX_CONVERSATION_TURNS) {
+        console.log(`⚠️  Requested ${maxTurns} turns, capping at ${MAX_CONVERSATION_TURNS}`);
+        maxTurns = MAX_CONVERSATION_TURNS;
+      }
 
       console.log(`🐝 Spawning ${agents.length} agents (mode: ${mode}${mode === 'conversation' ? `, ${maxTurns} turns` : ''})`);
 

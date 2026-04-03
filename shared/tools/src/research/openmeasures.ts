@@ -8,6 +8,7 @@ import { Tool } from '../base';
 import { OpenMeasuresClient } from 'open-measures';
 import { handleLargeResult } from '../storage/workspace';
 import { initializeTokenManager, getValidAccessToken, isInitialized } from './openmeasures-token-manager';
+import { InputSanitizer } from '../sanitization';
 
 /**
  * Get or create Open Measures client with automatic token refresh
@@ -106,10 +107,42 @@ export const openMeasuresTools: Tool[] = [
 
         const response = await client.content(params);
 
+        // Sanitize social media content for prompt injection protection
+        const sanitizedResults = (response.results || []).map((post: any) => {
+          const sanitized = InputSanitizer.sanitize(post.text || '', {
+            stripHtml: true,
+            removeControlChars: true,
+            removeZeroWidth: true,
+            normalizeUnicode: true,
+            detectSuspiciousPatterns: true,
+            maxLength: 5000, // Social posts are shorter
+          });
+
+          // Log high-risk social media content
+          if (sanitized.flagged) {
+            const injectionScore = InputSanitizer.detectInjection(post.text || '');
+            if (injectionScore.score > 0.6) {
+              console.warn(
+                '🚨 HIGH RISK social media content detected:',
+                `Platform: ${post.site || 'unknown'}`,
+                `Score: ${injectionScore.score.toFixed(2)}`,
+                `Flags: ${sanitized.flags.join(', ')}`,
+                `Preview: ${(post.text || '').substring(0, 100)}...`
+              );
+            }
+          }
+
+          return {
+            ...post,
+            text: sanitized.sanitized,
+            _injection_risk: sanitized.flagged ? InputSanitizer.detectInjection(post.text || '').score : 0,
+          };
+        });
+
         const result = {
           success: true,
           total: response.total_hits || 0,
-          results: response.results || [],
+          results: sanitizedResults,
           query: term,
           platform: site || 'all',
         };

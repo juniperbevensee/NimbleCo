@@ -71,6 +71,8 @@ export class MattermostListener {
   private reconnectDelay = 5000;
   private pingInterval?: NodeJS.Timeout;
   private adminUsers: string[];
+  private allowedUsers: string[];
+  private blockDMs: boolean;
   private db: Pool | null = null;
   private logAllMessages: boolean;
   private reactionTracker?: ReactionTracker;
@@ -86,9 +88,13 @@ export class MattermostListener {
     private nc: NatsConnection,
     private llmRouter: LLMRouter,
     adminUsers?: string[],
+    allowedUsers?: string[],
+    blockDMs?: boolean,
     logAllMessages?: boolean
   ) {
     this.adminUsers = adminUsers || [];
+    this.allowedUsers = allowedUsers || [];
+    this.blockDMs = blockDMs !== false; // Default to true (block DMs unless disabled)
     this.logAllMessages = logAllMessages !== false; // Default to true
     // Generate unique coordinator ID for deduplication
     this.coordinatorId = `coord-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -339,6 +345,26 @@ export class MattermostListener {
     const mentions = message.data.mentions ? JSON.parse(message.data.mentions) : [];
     if (!mentions.includes(this.botUserId)) {
       return;
+    }
+
+    // Check if this is a DM and DMs are blocked
+    if (this.blockDMs) {
+      const channelType = await this.getChannelType(post.channel_id);
+      if (channelType === 'D') {
+        // DM detected - check if user is allowed
+        const isAllowed = this.allowedUsers.includes(post.user_id);
+        if (!isAllowed) {
+          console.log(`🚫 Blocked DM from non-whitelisted user: ${post.user_id}`);
+          // Optionally send a polite response
+          await this.replyToPost(
+            post.channel_id,
+            post.id,
+            `👋 Hi! I'm configured to only respond in public channels. Please mention me in a team channel instead.`
+          );
+          return;
+        }
+        console.log(`✅ Allowed DM from whitelisted user: ${post.user_id}`);
+      }
     }
 
     console.log(`\n🗣️ Received mention in channel: ${message.data.channel_display_name}`);

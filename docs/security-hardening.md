@@ -120,25 +120,72 @@ Fine-grained access control for sensitive operations.
 
 See [Tool Permissions](./tool-permissions.md) for details.
 
+### 7. ✅ DM Access Control
+
+Block direct messages (DMs) with optional user whitelist. Forces public accountability while allowing specific trusted users.
+
+**Configuration** (per bot via `.env.*` files):
+```bash
+# Block all DMs except whitelisted users (default: true)
+MATTERMOST_BLOCK_DMS=true
+
+# Comma-separated list of Mattermost user IDs allowed to DM this bot
+MATTERMOST_ALLOWED_USERS=user_id_1,user_id_2,user_id_3
+```
+
+**Behavior**:
+- **DMs from non-whitelisted users**: Politely rejected with message directing to public channels
+- **DMs from whitelisted users**: Processed normally
+- **Public channels**: Always allowed (all users)
+- **Private channels**: Allowed if bot is a member
+
+**Logging**:
+```bash
+🚫 Blocked DM from non-whitelisted user: abc123xyz
+✅ Allowed DM from whitelisted user: trusted_user_id
+```
+
+**Use Cases**:
+- Personal bots: Only owner can DM
+- Team bots: Public interactions required (transparency, shared knowledge)
+- Private bots: Specific users whitelisted for sensitive operations
+
+**Example**:
+```bash
+# .env.personal (audrey_personal bot)
+MATTERMOST_BLOCK_DMS=true
+MATTERMOST_ALLOWED_USERS=juniper_user_id
+
+# .env.cryptid (team bot)
+MATTERMOST_BLOCK_DMS=true
+MATTERMOST_ALLOWED_USERS=juniper_user_id,trusted_dev_id
+```
+
+**To disable** (allow all DMs):
+```bash
+MATTERMOST_BLOCK_DMS=false
+```
+
+**Security Benefits**:
+- Prevents unauthorized private access to personal bots
+- Encourages public channel usage (shared learning, transparency)
+- Admin bypass built-in (admins automatically whitelisted if needed)
+
 ## Remaining Recommendations
 
-### VM Sandbox Replacement (Future Work)
+### ~~VM Sandbox Replacement~~ ✅ COMPLETED
 
-**Current**: Node's `vm` module is NOT a security boundary
-- Known escape vectors via constructor manipulation
-- Can potentially access `process`, `require`, `child_process`
+**Update (April 2, 2026)**: This has been implemented!
 
-**Options**:
-1. **isolated-vm** - Real V8 isolate with secure boundary
-2. **Docker containers** - Full OS-level isolation
-3. **WebAssembly** - Limited but secure execution
+**Current Implementation**: `isolated-vm` with true V8 isolation
+- See `shared/tools/src/compute/javascript.ts`
+- Separate V8 isolate (cannot access parent process)
+- Configurable memory limits (default 128MB)
+- CPU timeout protection (default 30s)
+- Safe for untrusted code execution
+- Provides sandboxed `fs.readFileSync()` for workspace/storage only
 
-**Trade-offs**:
-- Breaking change for existing code execution
-- Increased complexity and resource usage
-- May affect performance
-
-**Status**: Deferred - `vm` module is acceptable for trusted users, but should be upgraded for multi-tenant deployments.
+**Status**: ✅ Complete - `isolated-vm` provides production-grade isolation for code execution.
 
 ## Testing Security
 
@@ -197,6 +244,55 @@ AND result = 'success'
 ORDER BY timestamp DESC;
 ```
 
+## 7. ✅ Prompt Injection Sanitization
+
+All web and social media content is sanitized before being passed to the LLM to prevent prompt injection attacks.
+
+**Location**: `shared/tools/src/sanitization/index.ts`
+
+**Protected Tools**:
+- `web_search` - Brave Search results
+- `fetch_webpage` - Web page content
+- `search_social_media` - OpenMeasures social posts (CRITICAL - user-generated adversarial content)
+
+**Sanitization Layers**:
+1. **Unicode normalization** - NFC normalization to prevent homograph attacks
+2. **Zero-width character removal** - Strips invisible Unicode (U+200B-U+2064)
+3. **HTML/control character stripping** - Removes tags and control chars
+4. **Suspicious pattern detection** - 25+ regex patterns for jailbreaks, system markers, encoding indicators
+5. **Injection scoring** - 0-1 confidence score for attack likelihood
+
+**Monitored Patterns**:
+- Direct instruction attempts: "ignore previous instructions"
+- System prompt manipulation: `[INST]`, `<|im_start|>`, `<system>`
+- Role-playing jailbreaks: "act as DAN", "unrestricted mode"
+- Encoding obfuscation: "base64", "decode", "rot13"
+- Boundary escapes: `</untrusted_web_content>`, `</system>`
+
+**Logging**:
+```bash
+# Suspicious content is logged to console with flags
+🚨 Suspicious web search result: ['Suspicious pattern detected: /ignore\s+previous/']
+🚨 HIGH RISK social media content detected: Score: 0.78, Platform: telegram
+```
+
+High-risk content (score >0.6) automatically logged with platform, flags, and preview.
+
+**Based on**: Digital-Cryptids implementation + OWASP LLM Top 10 (2025) research
+
+### Future Enhancements (Roadmap)
+
+**Medium Priority**:
+- **Homograph detection**: Map Cyrillic/Greek lookalikes (а→a, е→e, etc.)
+- **RTL/LTR override protection**: Strip U+202E/U+202D directional marks
+- **Boundary validation**: Checksum/signing of `<untrusted_web_content>` wrapper
+- **Encoding detection**: Flag Base64/hex obfuscation attempts
+
+**Low Priority**:
+- **Monitoring dashboard**: View injection attempts, top sources, pattern frequency
+- **Rate limiting**: Slow down repeated injection attempts from same source
+- **ML-based detection**: Catch novel attacks not covered by regex patterns
+
 ## Security Reporting
 
 Found a security issue? Please report responsibly:
@@ -215,7 +311,9 @@ Found a security issue? Please report responsibly:
 | Deletions | Root protection | ✅ Implemented |
 | Permissions | Role-based access | ✅ Implemented |
 | Audit | Operation logging | ✅ Implemented |
-| Code Execution | VM isolation | ⚠️ Limited (future) |
+| Input | Prompt injection sanitization | ✅ Implemented |
+| Access | DM blocking with whitelist | ✅ Implemented |
+| Code Execution | isolated-vm isolation | ✅ Implemented |
 
 ## Notes
 

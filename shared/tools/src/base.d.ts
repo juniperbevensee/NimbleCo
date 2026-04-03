@@ -6,6 +6,7 @@ export interface ToolContext {
     room_id?: string;
     agent_id?: string;
     invocation_id?: string;
+    is_admin?: boolean;
 }
 export interface Tool {
     name: string;
@@ -57,4 +58,3 @@ export declare class TieredToolLoader {
     getToolsForTask(task: string): Tool[];
     searchTools(query: string): Tool[];
 }
-//# sourceMappingURL=base.d.ts.map

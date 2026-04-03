@@ -9,6 +9,7 @@
  */
 
 import { Tool } from '../base';
+import { InputSanitizer } from '../sanitization';
 
 /**
  * Wrap content in untrusted markers to mitigate prompt injection
@@ -148,7 +149,7 @@ async function fetchWebContent(url: string, maxLength: number = 10000): Promise<
     const html = await response.text();
 
     // Basic HTML to text conversion (strip tags, clean whitespace)
-    const text = html
+    let text = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
@@ -160,12 +161,22 @@ async function fetchWebContent(url: string, maxLength: number = 10000): Promise<
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Truncate if needed
-    if (text.length > maxLength) {
-      return text.substring(0, maxLength) + `\n\n... (truncated at ${maxLength} characters)`;
+    // Sanitize with comprehensive prompt injection protection
+    const sanitized = InputSanitizer.sanitize(text, {
+      stripHtml: true, // Remove any remaining HTML
+      removeControlChars: true,
+      removeZeroWidth: true,
+      normalizeUnicode: true,
+      detectSuspiciousPatterns: true,
+      maxLength,
+    });
+
+    // Log if suspicious content detected
+    if (sanitized.flagged) {
+      console.warn('🚨 Suspicious webpage content from', finalUrl.hostname, ':', sanitized.flags);
     }
 
-    return text;
+    return sanitized.sanitized;
   } catch (error: any) {
     throw new Error(`Failed to fetch ${url}: ${error.message}`);
   }

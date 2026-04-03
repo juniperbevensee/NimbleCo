@@ -76,6 +76,7 @@ workspace/
 .pm2-nimble-*.json
 
 # Claude Code local settings
+CLAUDE.md
 .claude/
 
 # Additional tools (allow structure/docs, ignore user folders)

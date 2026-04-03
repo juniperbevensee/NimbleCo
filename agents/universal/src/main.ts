@@ -356,10 +356,10 @@ FORMAT RULES:
     const isConversationMode = task.swarm_mode === 'conversation';
     const isParallelSwarm = task.swarm_mode === 'parallel';
     let iterations = 0;
-    // Conversation mode: 3 iterations (just respond to transcript)
+    // Conversation mode: 5 iterations (respond to transcript, maybe use 1-2 tools)
     // Parallel swarm (OSINT, research): 50 iterations (many tool calls needed)
     // Regular tasks: 30 iterations (balanced)
-    const maxIterations = isConversationMode ? 3 : (isParallelSwarm ? 50 : 30);
+    const maxIterations = isConversationMode ? 5 : (isParallelSwarm ? 50 : 30);
     let result: any = null;
 
     while (iterations < maxIterations) {
