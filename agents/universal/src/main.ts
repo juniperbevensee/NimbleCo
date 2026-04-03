@@ -352,9 +352,14 @@ FORMAT RULES:
     // Agentic loop
     // Conversation-mode swarm agents just need to read the transcript and respond —
     // they shouldn't need tools. Cap iterations low to stay within the 120s timeout.
+    // OSINT and research tasks often need many tool calls (search, analyze, cross-reference)
     const isConversationMode = task.swarm_mode === 'conversation';
+    const isParallelSwarm = task.swarm_mode === 'parallel';
     let iterations = 0;
-    const maxIterations = isConversationMode ? 3 : 30;
+    // Conversation mode: 3 iterations (just respond to transcript)
+    // Parallel swarm (OSINT, research): 50 iterations (many tool calls needed)
+    // Regular tasks: 30 iterations (balanced)
+    const maxIterations = isConversationMode ? 3 : (isParallelSwarm ? 50 : 30);
     let result: any = null;
 
     while (iterations < maxIterations) {

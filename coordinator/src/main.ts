@@ -207,6 +207,8 @@ class Coordinator {
       console.log('🤖 Starting Mattermost listener...');
       try {
         const adminUsers = process.env.MATTERMOST_ADMIN_USERS?.split(',').map(u => u.trim()).filter(u => u);
+        const allowedUsers = process.env.MATTERMOST_ALLOWED_USERS?.split(',').map(u => u.trim()).filter(u => u);
+        const blockDMs = process.env.MATTERMOST_BLOCK_DMS !== 'false'; // Default true
         const logAllMessages = process.env.MATTERMOST_LOG_ALL_MESSAGES !== 'false';
 
         this.mattermostListener = new MattermostListener(
@@ -215,6 +217,8 @@ class Coordinator {
           this.nc,
           this.llmRouter,
           adminUsers,
+          allowedUsers,
+          blockDMs,
           logAllMessages
         );
         await this.mattermostListener.start();
@@ -1253,11 +1257,21 @@ Example parallel swarm:
   ): Promise<void> {
     const { triggerUserId, isAdmin, swarmDepth } = options;
 
-    console.log(`🐝 Running parallel swarm with ${agents.length} agents`);
+    console.log(`🐝 Running parallel swarm with ${agents.length} agents (staggered start)`);
 
-    // Call agents in parallel
-    const results = await Promise.allSettled(
-      agents.map((agent, idx) => this.callAgent(agent.type, {
+    // Stagger agent starts to prevent simultaneous rate limit hits
+    // Start each agent 12s apart to reduce Bedrock 429 errors
+    const staggerDelayMs = 12000;
+    const agentPromises = agents.map(async (agent, idx) => {
+      // Add stagger delay for agents after the first
+      if (idx > 0) {
+        const delay = idx * staggerDelayMs;
+        console.log(`  ⏱️  ${agent.role}: starting in ${delay / 1000}s (position ${idx + 1}/${agents.length})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      console.log(`  🚀 ${agent.role}: starting now`);
+      return this.callAgent(agent.type, {
         ...task.payload,
         agent_id: `swarm-agent-${idx}`,
         role: agent.role,
@@ -1265,11 +1279,13 @@ Example parallel swarm:
         swarm_roster: swarmRoster.filter((_, i) => i !== idx),
         swarm_mode: 'parallel',
         is_admin: isAdmin,
-      }, { triggerUserId, isAdmin, swarmDepth }))
-    );
+      }, { triggerUserId, isAdmin, swarmDepth });
+    });
 
-    // Collect successful results
-    const agentResults: { role: string; response: string }[] = [];
+    const results = await Promise.allSettled(agentPromises);
+
+    // Collect successful results and partial results from failed agents
+    const agentResults: { role: string; response: string; status: 'success' | 'partial' }[] = [];
     const failures: { role: string; error: string }[] = [];
 
     results.forEach((result, i) => {
@@ -1280,12 +1296,23 @@ Example parallel swarm:
           agentResults.push({
             role: agent.role,
             response: value.result || 'No response',
+            status: 'success',
           });
         } else {
-          failures.push({
-            role: agent.role,
-            error: value.error || 'Unknown error',
-          });
+          // Check if failed agent returned partial work
+          if (value.result && typeof value.result === 'string' && value.result.length > 50) {
+            console.log(`  ℹ️  ${agent.role}: failed but produced partial result (${value.result.length} chars)`);
+            agentResults.push({
+              role: agent.role,
+              response: value.result,
+              status: 'partial',
+            });
+          } else {
+            failures.push({
+              role: agent.role,
+              error: value.error || 'Unknown error',
+            });
+          }
         }
       } else {
         failures.push({
@@ -1295,9 +1322,11 @@ Example parallel swarm:
       }
     });
 
-    console.log(`✅ Parallel swarm: ${agentResults.length} succeeded, ${failures.length} failed`);
+    const fullSuccesses = agentResults.filter(r => r.status === 'success').length;
+    const partialResults = agentResults.filter(r => r.status === 'partial').length;
+    console.log(`✅ Parallel swarm: ${fullSuccesses} succeeded, ${partialResults} partial, ${failures.length} failed`);
 
-    // Summarize results using LLM
+    // Summarize results using LLM (include both full and partial results)
     if (agentResults.length > 0 && roomId) {
       const userRequest = task.payload?.description || 'the user request';
 
@@ -1306,11 +1335,14 @@ Example parallel swarm:
 Original request: ${userRequest}
 
 Agent responses:
-${agentResults.map(r => `**${r.role}:**\n${r.response}`).join('\n\n---\n\n')}
+${agentResults.map(r => {
+  const statusNote = r.status === 'partial' ? ' *(partial result - agent timed out)*' : '';
+  return `**${r.role}${statusNote}:**\n${r.response}`;
+}).join('\n\n---\n\n')}
 
-${failures.length > 0 ? `\nFailed agents: ${failures.map(f => f.role).join(', ')}` : ''}
+${failures.length > 0 ? `\nFailed agents (no results): ${failures.map(f => `${f.role} (${f.error})`).join(', ')}` : ''}
 
-Synthesize these responses into a coherent, unified response for the user. Highlight key insights from each agent, resolve any conflicts or disagreements, and provide actionable conclusions.`;
+Synthesize these responses into a coherent, unified response for the user. Highlight key insights from each agent, resolve any conflicts or disagreements, and provide actionable conclusions. If any results are partial, note what was discovered before the timeout.`;
 
       const messages: LLMMessage[] = [{
         role: 'user',
@@ -1321,23 +1353,28 @@ Synthesize these responses into a coherent, unified response for the user. Highl
         const summaryResponse = await this.llmRouter.chat('complex', messages);
         console.log('📝 Generated summary for parallel swarm');
 
+        const statusLine = partialResults > 0
+          ? `(${fullSuccesses} complete, ${partialResults} partial, ${failures.length} failed)`
+          : `(${fullSuccesses}/${agents.length} agents)`;
+
         await this.postToChatPlatform(
           roomId,
           eventId,
-          `🐝 **Swarm Analysis Complete** (${agentResults.length}/${agents.length} agents)\n\n${summaryResponse.content}`,
+          `🐝 **Swarm Analysis Complete** ${statusLine}\n\n${summaryResponse.content}`,
           true
         );
       } catch (error) {
         console.error('Failed to generate summary:', error);
         // Fall back to raw results
-        const rawResults = agentResults.map(r =>
-          `### ${r.role}\n${r.response.substring(0, 500)}${r.response.length > 500 ? '...' : ''}`
-        ).join('\n\n');
+        const rawResults = agentResults.map(r => {
+          const statusNote = r.status === 'partial' ? ' *(partial)*' : '';
+          return `### ${r.role}${statusNote}\n${r.response.substring(0, 500)}${r.response.length > 500 ? '...' : ''}`;
+        }).join('\n\n');
 
         await this.postToChatPlatform(
           roomId,
           eventId,
-          `🐝 **Swarm Results** (${agentResults.length}/${agents.length} succeeded)\n\n${rawResults}`,
+          `🐝 **Swarm Results** (${fullSuccesses} complete, ${partialResults} partial)\n\n${rawResults}`,
           true
         );
       }
