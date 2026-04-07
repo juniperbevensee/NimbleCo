@@ -36,16 +36,16 @@ import { createPolicyClient } from './policy-factory';
 import { checkCircuitBreaker, checkInvocationLimit } from './rate-limiter';
 
 // Load .env from project root
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const sc = StringCodec();
 
 // Load constitutional identity document
 // Priority: storage/{BOT_ID}/identity.md → storage/identity.md → config/identity.template.md
 const botId = process.env.BOT_ID || 'default';
-const IDENTITY_PATH_BOT = path.resolve(__dirname, `../../storage/${botId}/identity.md`);
-const IDENTITY_PATH_SHARED = path.resolve(__dirname, '../../storage/identity.md');
-const IDENTITY_TEMPLATE_PATH = path.resolve(__dirname, '../../config/identity.template.md');
+const IDENTITY_PATH_BOT = path.resolve(process.cwd(), `storage/${botId}/identity.md`);
+const IDENTITY_PATH_SHARED = path.resolve(process.cwd(), 'storage/identity.md');
+const IDENTITY_TEMPLATE_PATH = path.resolve(process.cwd(), 'config/identity.template.md');
 let identityDocument = '';
 try {
   identityDocument = fs.readFileSync(IDENTITY_PATH_BOT, 'utf-8');
@@ -62,6 +62,17 @@ try {
       console.warn('⚠️  Could not load identity document:', error3);
     }
   }
+}
+
+// Load persistent memory document
+// Location: storage/{BOT_ID}/memory.md
+const MEMORY_PATH = path.resolve(process.cwd(), `storage/${botId}/memory.md`);
+let memoryDocument = '';
+try {
+  memoryDocument = fs.readFileSync(MEMORY_PATH, 'utf-8');
+  console.log(`🧠 Loaded persistent memory: storage/${botId}/memory.md (${memoryDocument.length} chars)`);
+} catch (error) {
+  console.log(`📝 No memory file found (agents can create one with append_agent_memory tool)`);
 }
 
 interface Task {
@@ -522,9 +533,22 @@ This Mattermost instance has both humans and AI agents. Behave differently depen
 
     // Split system prompt into cacheable (static) and non-cacheable (dynamic) parts
     // This enables Anthropic prompt caching for 90% cost savings on repeated requests
-    const cacheableSystemPrompt = `${identityDocument}
+
+    // Include memory document if it exists
+    const memorySection = memoryDocument ? `
 
 ---
+
+## Persistent Memory
+
+Below are your learned preferences, patterns, and important context that persist across sessions:
+
+${memoryDocument}
+
+---
+` : '';
+
+    const cacheableSystemPrompt = `${identityDocument}${memorySection}
 
 ## Current Task
 
@@ -573,7 +597,7 @@ OTHER IMPORTANT NOTES:
 - Don't ask for clarification unless absolutely necessary
 - Use tools multiple times if needed to complete the task
 - Provide clear, comprehensive answers
-- You have access to your persistent memory via read_agent_memory and append_agent_memory tools
+- Your persistent memory is automatically loaded into your context (see Persistent Memory section above). Use append_agent_memory to add new learned preferences or patterns.
 - You have access to your workspace files via list_workspace and read_workspace_file tools
 - When asked to check your workspace or find files, use list_workspace first to see what's available, then read_workspace_file to read specific files
 - ⚠️ CRITICAL: read_workspace_file is LIMITED to 50 items max for large files. DO NOT use it for data processing!

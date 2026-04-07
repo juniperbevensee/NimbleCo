@@ -122,7 +122,10 @@ const apps = validEnvFiles.map(envFile => {
 
   return {
     name: `nimble-${botName}`,
-    script: './coordinator/dist/main.js',
+    // IMPORTANT: This path must match TypeScript compiler output structure
+    // If you change coordinator/tsconfig.json, update this path AND update
+    // Swarm-Map's PM2Adapter.ts and agent-import.ts scriptPath references
+    script: './coordinator/dist/coordinator/src/main.js',
     cwd: rootDir,
 
     // Actually load environment variables from the .env file
