@@ -20,7 +20,7 @@ module.exports = {
     // Coordinator - central orchestration
     {
       name: 'coordinator',
-      script: './coordinator/dist/main.js',
+      script: './coordinator/dist/coordinator/src/main.js',
       cwd: './',
       instances: 1,
       autorestart: true,
@@ -28,9 +28,11 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
+        ADDITIONAL_TOOLS: 'osint',
       },
       env_development: {
         NODE_ENV: 'development',
+        ADDITIONAL_TOOLS: 'osint',
       },
       error_file: './logs/coordinator-error.log',
       out_file: './logs/coordinator-out.log',
@@ -38,20 +40,22 @@ module.exports = {
     },
 
     // Universal Agent - handles dynamic swarm agents
+    // exec_mode: fork is required — cluster mode does not work with compiled Node scripts
     {
       name: 'agent-universal',
-      script: 'npx',
-      args: 'tsx watch src/main.ts',
-      cwd: './agents/universal',
-      instances: 3, // Multiple instances for parallel swarm processing
+      script: './agents/universal/dist/main.js',
+      cwd: './',
+      instances: 3,
+      exec_mode: 'fork',
       autorestart: true,
-      watch: false, // tsx watch handles its own reloading
+      watch: false,
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
+        ADDITIONAL_TOOLS: 'osint',
       },
-      error_file: '../logs/agent-universal-error.log',
-      out_file: '../logs/agent-universal-out.log',
+      error_file: './logs/agent-universal-error.log',
+      out_file: './logs/agent-universal-out.log',
       time: true,
     },
 

@@ -31,6 +31,7 @@ import {
   ToolContext,
   filterToolsByPolicy,
   PolicyClient,
+  getAdditionalCredentialEnvVars,
 } from '@nimbleco/tools';
 import { createPolicyClient } from './policy-factory';
 import { checkCircuitBreaker, checkInvocationLimit } from './rate-limiter';
@@ -396,11 +397,11 @@ class Coordinator {
       'GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY',
       'GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY',
       'BRAVE_SEARCH_API_KEY',
-      'HELIUS_API_KEY',
-      'COINGECKO_API_KEY',
-      'DEHASHED_API_KEY',
       'MATTERMOST_URL',
       'MATTERMOST_BOT_TOKEN',
+      // Additional tool credentials are declared by each additional-tools module
+      // and registered at startup via loadAdditionalTools() — see shared/tools/src/index.ts
+      ...getAdditionalCredentialEnvVars(),
     ];
     for (const envVar of credentialEnvVars) {
       if (process.env[envVar]) {
@@ -764,6 +765,14 @@ User's request: ${description}`;
             }
           }
         }
+      }
+
+      // Normalize Ollama/local model output: they emit {name, arguments} instead of {tool, input}
+      if (toolCall && !toolCall.tool && toolCall.name) {
+        toolCall = {
+          tool: toolCall.name,
+          input: toolCall.arguments || toolCall.input || {},
+        };
       }
 
       if (toolCall && toolCall.tool) {

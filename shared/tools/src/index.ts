@@ -81,6 +81,20 @@ export const registry = new ToolRegistry();
  *   └── personal/
  *       └── index.ts
  */
+// Accumulated metadata declared by additional-tools modules
+const _additionalTaskKeywords: string[] = [];
+const _additionalCredentialEnvVars: string[] = [];
+
+/** Keywords declared by additional-tools modules for task routing */
+export function getAdditionalTaskKeywords(): string[] {
+  return _additionalTaskKeywords;
+}
+
+/** Credential env var names declared by additional-tools modules */
+export function getAdditionalCredentialEnvVars(): string[] {
+  return _additionalCredentialEnvVars;
+}
+
 async function loadAdditionalTools(): Promise<void> {
   const additionalToolsEnv = process.env.ADDITIONAL_TOOLS;
 
@@ -121,6 +135,14 @@ async function loadAdditionalTools(): Promise<void> {
 
       // Dynamically import the tools
       const module = await import(categoryPath);
+
+      // Read optional metadata exports declared by the module
+      if (Array.isArray(module.taskKeywords)) {
+        _additionalTaskKeywords.push(...module.taskKeywords);
+      }
+      if (Array.isArray(module.credentialEnvVars)) {
+        _additionalCredentialEnvVars.push(...module.credentialEnvVars);
+      }
 
       // Look for exported tool arrays
       // Convention: export const {category}Tools: Tool[] = [...]
@@ -287,10 +309,13 @@ export class CachedPromptBuilder {
     // Get task-specific tools
     const taskTools = this.selector.selectByTask(taskDescription);
 
-    // SPECIAL CASE: Add research tools for social media analysis tasks
+    // SPECIAL CASE: Add research tools when task matches known keywords.
+    // Built-in keywords cover social media / open-measures tools; additional-tools
+    // modules declare their own keywords (e.g. osint, cryptid) via taskKeywords export.
     const lowercaseTask = taskDescription.toLowerCase();
     const researchKeywords = ['openmeasures', 'social media', 'telegram', 'twitter', 'reddit', 'actors', 'influencer', 'trending'];
-    const researchTools = researchKeywords.some(kw => lowercaseTask.includes(kw))
+    const allKeywords = [...researchKeywords, ...getAdditionalTaskKeywords()];
+    const researchTools = allKeywords.some(kw => lowercaseTask.includes(kw))
       ? this.registry.getByCategory('research')
       : [];
 

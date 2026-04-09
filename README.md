@@ -594,6 +594,43 @@ See [Security Hardening Guide](./docs/security-hardening.md) for implementation 
 - Free credits from multiple providers
 - Cost optimization by routing appropriately
 
+## Troubleshooting
+
+Common issues when setting up NimbleCo for the first time:
+
+**pnpm not installed**
+The repo uses pnpm workspaces. Install it before anything else:
+```bash
+npm install -g pnpm
+```
+
+**Docker daemon not accessible (Linux)**
+Your user needs to be in the `docker` group. If Docker was already installed when you ran setup:
+```bash
+sudo usermod -aG docker $USER
+newgrp docker   # activate immediately without logging out
+```
+
+**Stale `DATABASE_URL` overriding `.env`**
+If you have a `DATABASE_URL` set in `~/.bashrc` or `~/.zshrc` from another project, dotenv won't override it — and PM2 inherits whatever the daemon was started with. Fix:
+```bash
+unset DATABASE_URL        # for the current shell
+# Also remove it from ~/.bashrc / ~/.zshrc
+pm2 kill                  # restart daemon so it picks up the clean environment
+npm start
+```
+
+**Docker postgres port conflict (port 5432 already in use)**
+If your host already runs postgres on 5432, the Docker container can't bind to it. Options:
+1. Change the Docker postgres port to 5433 in `docker-compose.yml` and update `DATABASE_URL` accordingly
+2. Skip Docker postgres entirely and point `DATABASE_URL` at your existing host postgres instance
+
+**Database tables missing (coordinator internal tables)**
+`init.sql` creates application tables, but coordinator internal tables (`processed_posts`, `invocations`, `invocation_rate_limits`) live in numbered migration files. The setup script runs these automatically via `npm run db:migrate`, which applies all 9 files in `infrastructure/postgres/migrations/` in order. If you set up the database manually without running setup, run:
+```bash
+npm run db:migrate
+```
+
 ## Contributing
 
 This is an experimental project. Contributions welcome! Areas of interest:

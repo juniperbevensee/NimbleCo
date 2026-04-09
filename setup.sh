@@ -492,6 +492,10 @@ elif ! docker ps &> /dev/null 2>&1; then
         else
             echo -e "${RED}✗${NC} Docker failed to start"
             echo -e "   Please check: sudo systemctl status docker"
+            echo ""
+            echo -e "   If the error is a permissions issue, add your user to the docker group:"
+            echo -e "   ${YELLOW}sudo usermod -aG docker \$USER${NC}"
+            echo -e "   Then activate without logging out: ${YELLOW}newgrp docker${NC}"
             exit 1
         fi
     fi
@@ -763,6 +767,13 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 NATS_URL=${NATS_URL:-nats://localhost:4222}
+if [ -n "${DATABASE_URL+x}" ] && [ "$DATABASE_URL" != "postgresql://agent:change-this-password@localhost:5432/nimbleco" ]; then
+    echo -e "${YELLOW}⚠${NC}  DATABASE_URL is already set in your environment: $DATABASE_URL"
+    echo -e "   This will override the value in .env (dotenv does not replace existing env vars)."
+    echo -e "   If this is a stale value (e.g. from ~/.bashrc), fix it with:"
+    echo -e "   ${YELLOW}unset DATABASE_URL${NC}  — then kill and restart the PM2 daemon: ${YELLOW}pm2 kill${NC}"
+    echo ""
+fi
 DATABASE_URL=${DATABASE_URL:-postgresql://agent:change-this-password@localhost:5432/nimbleco}
 
 echo -e "${GREEN}✓${NC} NATS: $NATS_URL"
