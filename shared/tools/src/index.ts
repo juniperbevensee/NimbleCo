@@ -23,6 +23,10 @@ import { computeTools } from './compute/javascript';
 import { dataScienceTools } from './compute/data-science';
 import { advancedDataScienceTools } from './compute/data-science-advanced';
 import { textAnalysisBatchTools } from './compute/text-analysis-batch';
+import { batch_lookup } from './compute/batch';
+import { get_job_status } from './compute/jobs';
+import { run_python } from './compute/python';
+import { run_shell } from './compute/shell';
 import { openMeasuresTools } from './research/openmeasures';
 import { analyticsTools } from './analytics/database';
 import { invocationAnalyticsTools } from './analytics/invocations';
@@ -52,6 +56,10 @@ export const registry = new ToolRegistry();
   ...computeTools,
   ...dataScienceTools,
   ...advancedDataScienceTools,
+  batch_lookup,
+  run_python,
+  run_shell,
+  get_job_status,
   ...textAnalysisBatchTools,
   ...openMeasuresTools,
   ...analyticsTools,
@@ -447,6 +455,10 @@ export { filesystemTools } from './filesystem/tools';
 export * from './filesystem/sandbox';
 export * from './web/fetch';
 export * from './compute/javascript';
+export * from './compute/batch';
+export * from './compute/jobs';
+export * from './compute/python';
+export * from './compute/shell';
 export * from './research/openmeasures';
 export * from './analytics/database';
 export * from './analytics/invocations';
