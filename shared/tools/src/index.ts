@@ -265,7 +265,10 @@ export class SmartToolSelector {
         t.name === 'read_agent_memory' ||
         t.name === 'append_agent_memory' ||
         t.name === 'list_workspace' ||
-        t.name === 'read_workspace_file'
+        t.name === 'read_workspace_file' ||
+        t.name === 'list_files' ||
+        t.name === 'upload_file' ||
+        t.name === 'download_file'
       ),
     ];
   }

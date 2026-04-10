@@ -284,7 +284,22 @@ export const listWorkspace: Tool = {
     }
 
     try {
+      // Ensure workspace root exists
       await fs.mkdir(getWorkspaceRoot(), { recursive: true });
+
+      // Check if target directory exists
+      try {
+        await fs.access(resolvedDir);
+      } catch (error) {
+        // Directory doesn't exist - return empty list instead of error
+        return {
+          success: true,
+          directory: resolvedDir,
+          files: [],
+          message: `Directory does not exist yet. It will be created when files are written.`,
+        };
+      }
+
       const entries = await fs.readdir(resolvedDir, { withFileTypes: true });
 
       const files = await Promise.all(
