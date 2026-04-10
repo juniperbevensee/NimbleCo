@@ -559,17 +559,18 @@ export class MattermostListener {
         }
       }
 
-      // Fetch last channel exchange for conversational context (when not in a thread)
-      let lastExchange: { user_message: string; user_id: string; assistant_response?: string } | null = null;
+      // Fetch recent channel exchanges for conversational context (when not in a thread)
+      let recentExchanges: { exchanges: Array<{ user_message: string; user_id: string; assistant_response?: string }> } | null = null;
       if (!post.root_id) {
-        console.log(`   🔍 Fetching last exchange for channel ${post.channel_id.substring(0, 8)}...`);
-        lastExchange = await this.getLastChannelExchange(post.channel_id, post.id);
-        if (lastExchange) {
-          console.log(`   💬 Last exchange found:`);
-          console.log(`      User msg: "${lastExchange.user_message.substring(0, 80)}..."`);
-          console.log(`      Assistant: ${lastExchange.assistant_response ? `"${lastExchange.assistant_response.substring(0, 80)}..."` : 'NONE'}`);
+        console.log(`   🔍 Fetching recent exchanges for channel ${post.channel_id.substring(0, 8)}...`);
+        recentExchanges = await this.getLastChannelExchange(post.channel_id, post.id);
+        if (recentExchanges) {
+          console.log(`   💬 ${recentExchanges.exchanges.length} exchanges found`);
+          const last = recentExchanges.exchanges[recentExchanges.exchanges.length - 1];
+          console.log(`      Last user msg: "${last.user_message.substring(0, 80)}..."`);
+          console.log(`      Last assistant: ${last.assistant_response ? `"${last.assistant_response.substring(0, 80)}..."` : 'NONE'}`);
         } else {
-          console.log(`   ⚠️  No last exchange found for this channel`);
+          console.log(`   ⚠️  No recent exchanges found for this channel`);
         }
       } else {
         console.log(`   🧵 In thread ${post.root_id.substring(0, 8)}, skipping channel context`);
@@ -611,7 +612,7 @@ export class MattermostListener {
               user_id: r.user_id,
             })),
           } : undefined,
-          last_exchange: lastExchange || undefined,
+          recent_exchanges: recentExchanges || undefined,
         },
         created_at: Date.now(),
       };
@@ -815,7 +816,7 @@ Respond with ONLY one word: chat or task`;
    * NOTE: Uses retry logic to handle race condition where a concurrent request's
    * assistant message INSERT may not have committed yet.
    */
-  private async getLastChannelExchange(channelId: string, currentPostId: string, retryCount = 0): Promise<{ user_message: string; user_id: string; assistant_response?: string } | null> {
+  private async getLastChannelExchange(channelId: string, currentPostId: string, retryCount = 0): Promise<{ exchanges: Array<{ user_message: string; user_id: string; assistant_response?: string }> } | null> {
     if (!this.logAllMessages) {
       console.log(`   [getLastChannelExchange] logAllMessages is disabled`);
       return null;
@@ -837,15 +838,15 @@ Respond with ONLY one word: chat or task`;
       }
       console.log(`   [getLastChannelExchange] Found conversation ${conversationId.substring(0, 8)} for channel`);
 
-      // Get the last 4 messages to better handle race conditions
-      // We may need more context to find the last complete exchange
+      // Fetch enough rows to reconstruct up to 5 full exchanges (user+assistant pairs)
+      // plus a buffer for race conditions
       const messagesResult = await db.query(
         `
         SELECT role, content, sender_id, created_at
         FROM messages
         WHERE conversation_id = $1 AND event_id != $2
         ORDER BY created_at DESC
-        LIMIT 4
+        LIMIT 20
         `,
         [conversationId, currentPostId]
       );
@@ -856,38 +857,48 @@ Respond with ONLY one word: chat or task`;
         return null;
       }
 
-      // Log what we found for debugging
-      for (const msg of messagesResult.rows) {
-        console.log(`   [getLastChannelExchange] - ${msg.role}: "${(msg.content || '').substring(0, 50)}..."`);
+      // Messages come back newest-first; reverse to process oldest-first
+      const messages = [...messagesResult.rows].reverse();
+
+      // Build exchanges by pairing consecutive user → assistant messages
+      const exchanges: Array<{ user_message: string; user_id: string; assistant_response?: string }> = [];
+      let i = 0;
+      while (i < messages.length && exchanges.length < 5) {
+        const msg = messages[i];
+        if (msg.role === 'user') {
+          const next = messages[i + 1];
+          const assistantResponse = next?.role === 'assistant' ? next.content : undefined;
+          exchanges.push({
+            user_message: msg.content,
+            user_id: msg.sender_id,
+            assistant_response: assistantResponse,
+          });
+          i += assistantResponse !== undefined ? 2 : 1;
+        } else {
+          i++;
+        }
       }
 
-      // Find the most recent user message and optional assistant response
-      const messages = messagesResult.rows;
-      let userMessage = messages.find((m: any) => m.role === 'user');
-      let assistantMessage = messages.find((m: any) => m.role === 'assistant');
-
-      if (!userMessage) {
-        console.log(`   [getLastChannelExchange] No user message found in recent messages`);
+      if (exchanges.length === 0) {
+        console.log(`   [getLastChannelExchange] No user messages found in recent messages`);
         return null;
       }
 
-      // Race condition detection: If we have a user message but no assistant response,
-      // and the user message is very recent (< 5 seconds old), the assistant response
-      // INSERT might still be in flight. Retry once after a short delay.
-      if (!assistantMessage && retryCount < 1) {
-        const messageAge = Date.now() - new Date(userMessage.created_at).getTime();
-        if (messageAge < 5000) { // Message is less than 5 seconds old
+      // Race condition detection: most recent exchange has no assistant response and
+      // the user message is very recent — the assistant INSERT may still be in flight.
+      const lastExchange = exchanges[exchanges.length - 1];
+      if (!lastExchange.assistant_response && retryCount < 1) {
+        const lastRow = messagesResult.rows[0]; // newest row (DESC order)
+        const messageAge = Date.now() - new Date(lastRow.created_at).getTime();
+        if (messageAge < 5000) {
           console.log(`   ⏳ Context race condition detected, waiting for assistant message...`);
-          await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms
+          await new Promise(resolve => setTimeout(resolve, 200));
           return this.getLastChannelExchange(channelId, currentPostId, retryCount + 1);
         }
       }
 
-      return {
-        user_message: userMessage.content,
-        user_id: userMessage.sender_id,
-        assistant_response: assistantMessage?.content,
-      };
+      console.log(`   [getLastChannelExchange] Returning ${exchanges.length} exchanges`);
+      return { exchanges };
     } catch (error) {
       console.warn(`⚠️  Error fetching last channel exchange:`, error);
       return null;

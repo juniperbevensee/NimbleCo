@@ -474,19 +474,17 @@ ${threadContext.recent_replies.map((r: { user_id: string; message: string }) => 
 The user is now replying to this thread with their current message.
 ` : '';
 
-    // Last exchange context for conversational continuity (when not in a thread)
-    const lastExchange = task.payload?.last_exchange;
-    const lastExchangeStr = (!threadContext && lastExchange) ? `
+    // Recent exchanges for conversational continuity (when not in a thread)
+    const recentExchanges: Array<{ user_message: string; user_id: string; assistant_response?: string }> = task.payload?.recent_exchanges?.exchanges || [];
+    const lastExchangeStr = (!threadContext && recentExchanges.length > 0) ? `
 
-### Recent Context (previous exchange in this channel)
+### Recent Conversation History (last ${recentExchanges.length} exchange${recentExchanges.length !== 1 ? 's' : ''} in this channel)
 
-**User (${lastExchange.user_id}) said:**
-${lastExchange.user_message}
-${lastExchange.assistant_response ? `
-**Your response:**
-${lastExchange.assistant_response}
-` : ''}
-This gives you context about the ongoing conversation.
+${recentExchanges.map((ex, i) => `**Exchange ${i + 1}:**
+User (${ex.user_id}): ${ex.user_message}
+${ex.assistant_response ? `You: ${ex.assistant_response}` : '(no response recorded)'}`).join('\n\n')}
+
+This gives you context about the ongoing conversation. If you need to look further back, use view_recent_invocations.
 ` : '';
 
     const mattermostContext = task.payload?.mattermost_thread ? `
@@ -599,8 +597,12 @@ OTHER IMPORTANT NOTES:
 - Use tools multiple times if needed to complete the task
 - Provide clear, comprehensive answers
 - Your persistent memory is automatically loaded into your context (see Persistent Memory section above). Use append_agent_memory to add new learned preferences or patterns.
-- You have access to your workspace files via list_workspace and read_workspace_file tools
-- When asked to check your workspace or find files, use list_workspace first to see what's available, then read_workspace_file to read specific files
+- If you feel like you're missing context for what a user is referring to (e.g. "that file", "the analysis we did", "what we discussed"), use view_recent_invocations to browse recent activity in this channel, then view_invocation_details to retrieve the full content of a specific past invocation.
+- You have TWO storage areas:
+  * Workspace (ephemeral): use list_workspace and read_workspace_file for temporary working files
+  * Persistent files: use list_files and download_file for uploaded documents, reports, and saved data
+- When asked to find a file, check BOTH: list_workspace for workspace AND list_files for persistent storage
+- Use upload_file to save files persistently, write_file for temporary workspace files
 - ⚠️ CRITICAL: read_workspace_file is LIMITED to 50 items max for large files. DO NOT use it for data processing!
 - ⚠️ FOR DATA TRANSFORMATIONS (counting, filtering, aggregating): Use execute_javascript with fs.readFileSync() to process large files locally without sending massive files to the LLM
 - ⚠️ CRITICAL: In execute_javascript sandbox:
@@ -824,7 +826,7 @@ User's request: ${description}`;
 
           messages.push({
             role: 'user',
-            content: `Tool result: ${JSON.stringify(toolResult)}\n\nProvide a natural language summary for the user.`
+            content: `Tool result: ${JSON.stringify(toolResult)}\n\nContinue with the next step. If the task is complete, provide a final summary. If more tool calls are needed, make them now.`
           });
         } catch (error) {
           console.log(`  ✗ Tool execution failed:`, error);
@@ -878,7 +880,8 @@ User's request: ${description}`;
         if (chartToolCalled && !attachmentMade) {
           const fs = await import('fs');
           const path = await import('path');
-          const workspacePath = process.env.WORKSPACE_PATH || path.resolve(process.cwd(), 'storage/workspace');
+          const { getWorkspaceRoot } = await import('@nimbleco/tools');
+          const workspacePath = getWorkspaceRoot();
 
           try {
             const files = fs.readdirSync(workspacePath);
