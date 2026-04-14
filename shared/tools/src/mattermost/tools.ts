@@ -128,6 +128,69 @@ export const downloadAttachment = createTool({
 });
 
 // ============================================================================
+// Post Message (text only)
+// ============================================================================
+
+export const postMessage = createTool({
+  name: 'post_mattermost_message',
+  description: 'Post a text message to a Mattermost channel. Use this when you need to proactively send a message (handoff summaries, notifications, status updates). Your normal chat responses are posted automatically — this tool is for posting to OTHER channels or threads.',
+  category: 'communication',
+  use_cases: [
+    'Post a handoff summary to a channel',
+    'Send a notification to a specific channel',
+    'Post a status update',
+    'Reply to a thread in another channel',
+  ],
+  inputSchema: z.object({
+    channel_id: z.string().describe('Mattermost channel ID to post to'),
+    message: z.string().describe('Message text (supports Mattermost markdown)'),
+    thread_id: z.string().optional().describe('Thread ID (root_id) to reply to. If provided, posts as a threaded reply.'),
+  }),
+  handler: async ({ channel_id, message, thread_id }, context) => {
+    const config = getMattermostConfig(context);
+
+    try {
+      const postBody: any = {
+        channel_id,
+        message,
+      };
+
+      if (thread_id) {
+        postBody.root_id = thread_id;
+      }
+
+      const response = await fetch(`${config.url}/api/v4/posts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(postBody),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Failed to post message: ${response.statusText} - ${errorBody}`);
+      }
+
+      const postData = await response.json() as any;
+
+      return {
+        success: true,
+        post_id: postData.id,
+        channel_id: postData.channel_id,
+        message: 'Message posted successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  },
+});
+
+// ============================================================================
 // Upload and Post with Attachment
 // ============================================================================
 
@@ -340,6 +403,7 @@ export const addReaction = createTool({
 
 export const mattermostTools: Tool[] = [
   downloadAttachment,
+  postMessage,
   postWithAttachment,
   addReaction,
 ];
