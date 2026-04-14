@@ -154,6 +154,23 @@ const apps = validEnvFiles.map(envFile => {
   };
 });
 
+// Tool executor API server (called by Swarm-Map proxy on port 3000)
+apps.push({
+  name: 'nimble-api',
+  script: './coordinator/dist/coordinator/src/api-server.js',
+  cwd: rootDir,
+  exec_mode: 'fork',
+  instances: 1,
+  autorestart: true,
+  watch: false,
+  max_memory_restart: '500M',
+  error_file: './logs/pm2-api-error.log',
+  out_file: './logs/pm2-api-out.log',
+  log_date_format: 'YYYY-MM-DD HH:mm:ss',
+  merge_logs: true,
+  env_file: path.join(rootDir, '.env'),
+});
+
 // Also add dashboard server as a separate PM2 app
 apps.push({
   name: 'nimble-dashboard',

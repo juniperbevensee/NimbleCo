@@ -97,6 +97,20 @@ module.exports = {
       time: true,
     },
 
+    // Tool executor API server (called by Swarm-Map proxy)
+    {
+      name: 'nimble-api',
+      script: './coordinator/dist/coordinator/src/api-server.js',
+      cwd: './',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      error_file: './logs/api-server-error.log',
+      out_file: './logs/api-server-out.log',
+      time: true,
+    },
+
     // Dashboard UI (Vite dev server)
     {
       name: 'dashboard-ui',
