@@ -705,6 +705,573 @@ export const googleDriveMoveFile: Tool = {
   },
 };
 
+export const googleDriveCreateGoogleSheet: Tool = {
+  name: 'google_drive_create_google_sheet',
+  description: 'Create a native Google Sheets spreadsheet (unlimited storage, collaborative editing)',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'Create a new spreadsheet for data collection',
+    'Set up a shared spreadsheet for collaboration',
+    'Create a tracking sheet from structured data',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        description: 'Title for the new spreadsheet',
+      },
+      folder_id: {
+        type: 'string',
+        description: 'Google Drive folder ID to create the spreadsheet in (optional)',
+      },
+      sheet_names: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Names for sheet tabs (default: ["Sheet1"])',
+      },
+      initial_data: {
+        type: 'array',
+        items: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+        description: 'Initial rows of data to populate (first row as headers)',
+      },
+    },
+    required: ['title'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth: auth as any });
+    const drive = google.drive({ version: 'v3', auth: auth as any });
+
+    try {
+      // Create spreadsheet
+      const sheetNames = input.sheet_names || ['Sheet1'];
+      const spreadsheet = await sheets.spreadsheets.create({
+        requestBody: {
+          properties: { title: input.title },
+          sheets: sheetNames.map((name: string, i: number) => ({
+            properties: { title: name, index: i },
+          })),
+        },
+      });
+
+      const spreadsheetId = spreadsheet.data.spreadsheetId!;
+
+      // Move to folder if specified
+      if (input.folder_id) {
+        await drive.files.update({
+          fileId: spreadsheetId,
+          addParents: input.folder_id,
+          fields: 'id, parents',
+        });
+      }
+
+      // Populate initial data if provided
+      if (input.initial_data && input.initial_data.length > 0) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetNames[0]}!A1`,
+          valueInputOption: 'RAW',
+          requestBody: { values: input.initial_data },
+        });
+      }
+
+      return {
+        success: true,
+        spreadsheet_id: spreadsheetId,
+        title: input.title,
+        url: spreadsheet.data.spreadsheetUrl,
+        sheets: sheetNames,
+      };
+    } catch (error: any) {
+      return { success: false, error: `Google Sheets API error: ${error.message}` };
+    }
+  },
+};
+
+export const googleSheetsRead: Tool = {
+  name: 'google_sheets_read',
+  description: 'Read data from a Google Sheets spreadsheet. Returns cell values from the specified range or entire sheet.',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'Read data from a spreadsheet',
+    'Check current contents of a Google Sheet before writing',
+    'Extract structured data from a sheet',
+    'Review spreadsheet headers and rows',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      spreadsheet_id: {
+        type: 'string',
+        description: 'Spreadsheet ID from the Google Sheets URL (the long string between /d/ and /edit)',
+      },
+      range: {
+        type: 'string',
+        description: 'A1 notation range to read (e.g., "A1:D10", "Sheet1!A:Z"). Defaults to entire first sheet.',
+      },
+      sheet_name: {
+        type: 'string',
+        description: 'Name of the sheet tab to read from (default: first sheet). Ignored if range includes sheet name.',
+      },
+    },
+    required: ['spreadsheet_id'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth: auth as any });
+
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: input.spreadsheet_id });
+      const sheetNames = meta.data.sheets?.map(s => s.properties?.title) ?? [];
+
+      let range = input.range;
+      if (!range) {
+        const sheetName = input.sheet_name || sheetNames[0] || 'Sheet1';
+        range = sheetName;
+      } else if (input.sheet_name && !range.includes('!')) {
+        range = `${input.sheet_name}!${range}`;
+      }
+
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: input.spreadsheet_id,
+        range,
+      });
+
+      const rows = response.data.values || [];
+      return {
+        success: true,
+        spreadsheet_id: input.spreadsheet_id,
+        title: meta.data.properties?.title,
+        sheet_names: sheetNames,
+        range: response.data.range,
+        total_rows: rows.length,
+        data: rows,
+      };
+    } catch (error: any) {
+      return { success: false, error: `Google Sheets API error: ${error.message}` };
+    }
+  },
+};
+
+export const googleSheetsList: Tool = {
+  name: 'google_sheets_list',
+  description: 'List all sheet tabs in a Google Sheets spreadsheet, including their properties (name, index, row/column count).',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'See what tabs exist in a spreadsheet',
+    'Get sheet metadata before reading or writing',
+    'Find the right sheet tab name',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      spreadsheet_id: {
+        type: 'string',
+        description: 'Spreadsheet ID from the Google Sheets URL',
+      },
+    },
+    required: ['spreadsheet_id'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth: auth as any });
+
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: input.spreadsheet_id });
+      const sheetTabs = meta.data.sheets?.map(s => ({
+        title: s.properties?.title,
+        index: s.properties?.index,
+        sheetId: s.properties?.sheetId,
+        rowCount: s.properties?.gridProperties?.rowCount,
+        columnCount: s.properties?.gridProperties?.columnCount,
+      })) ?? [];
+
+      return {
+        success: true,
+        spreadsheet_id: input.spreadsheet_id,
+        title: meta.data.properties?.title,
+        sheets: sheetTabs,
+      };
+    } catch (error: any) {
+      return { success: false, error: `Google Sheets API error: ${error.message}` };
+    }
+  },
+};
+
+export const googleSheetsWrite: Tool = {
+  name: 'google_sheets_write',
+  description: 'Write rows of data to an existing Google Sheets spreadsheet',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'Write data to a spreadsheet',
+    'Append rows to an existing sheet',
+    'Update specific cells in a spreadsheet',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      spreadsheet_id: {
+        type: 'string',
+        description: 'Spreadsheet ID from the Google Sheets URL',
+      },
+      range: {
+        type: 'string',
+        description: 'A1 notation range to write to (e.g., "A1:D10", "Sheet1!A1")',
+      },
+      values: {
+        type: 'array',
+        items: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+        description: 'Rows of data to write (array of arrays)',
+      },
+      mode: {
+        type: 'string',
+        enum: ['overwrite', 'append'],
+        description: 'overwrite: write at range. append: add after existing data (default: overwrite)',
+      },
+    },
+    required: ['spreadsheet_id', 'values'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth: auth as any });
+
+    try {
+      const mode = input.mode || 'overwrite';
+
+      if (mode === 'append') {
+        const range = input.range || 'Sheet1';
+        const response = await sheets.spreadsheets.values.append({
+          spreadsheetId: input.spreadsheet_id,
+          range,
+          valueInputOption: 'RAW',
+          insertDataOption: 'INSERT_ROWS',
+          requestBody: { values: input.values },
+        });
+
+        return {
+          success: true,
+          spreadsheet_id: input.spreadsheet_id,
+          updated_range: response.data.updates?.updatedRange,
+          rows_written: input.values.length,
+        };
+      } else {
+        const range = input.range || 'Sheet1!A1';
+        const response = await sheets.spreadsheets.values.update({
+          spreadsheetId: input.spreadsheet_id,
+          range,
+          valueInputOption: 'RAW',
+          requestBody: { values: input.values },
+        });
+
+        return {
+          success: true,
+          spreadsheet_id: input.spreadsheet_id,
+          updated_range: response.data.updatedRange,
+          rows_written: response.data.updatedRows,
+          cells_updated: response.data.updatedCells,
+        };
+      }
+    } catch (error: any) {
+      return { success: false, error: `Google Sheets API error: ${error.message}` };
+    }
+  },
+};
+
+export const googleDocsRead: Tool = {
+  name: 'google_docs_read',
+  description: 'Read the text content of a Google Doc. Returns the full document text.',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'Read the contents of a Google Doc',
+    'Check what is already in a document before editing',
+    'Extract text from a shared document',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      document_id: {
+        type: 'string',
+        description: 'Google Doc ID from the URL (the long string between /d/ and /edit)',
+      },
+    },
+    required: ['document_id'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+    });
+    const docs = google.docs({ version: 'v1', auth: auth as any });
+
+    try {
+      const doc = await docs.documents.get({ documentId: input.document_id });
+
+      let text = '';
+      for (const element of doc.data.body?.content ?? []) {
+        if (element.paragraph) {
+          for (const el of element.paragraph.elements ?? []) {
+            if (el.textRun?.content) {
+              text += el.textRun.content;
+            }
+          }
+        } else if (element.table) {
+          for (const row of element.table.tableRows ?? []) {
+            const cells: string[] = [];
+            for (const cell of row.tableCells ?? []) {
+              let cellText = '';
+              for (const cellContent of cell.content ?? []) {
+                if (cellContent.paragraph) {
+                  for (const el of cellContent.paragraph.elements ?? []) {
+                    if (el.textRun?.content) {
+                      cellText += el.textRun.content.trim();
+                    }
+                  }
+                }
+              }
+              cells.push(cellText);
+            }
+            text += cells.join('\t') + '\n';
+          }
+        }
+      }
+
+      return {
+        success: true,
+        document_id: input.document_id,
+        title: doc.data.title,
+        content: text,
+        character_count: text.length,
+      };
+    } catch (error: any) {
+      return { success: false, error: `Google Docs API error: ${error.message}` };
+    }
+  },
+};
+
+export const googleDocsAppend: Tool = {
+  name: 'google_docs_append',
+  description: 'Append text content to an existing Google Doc',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'Add content to the end of a document',
+    'Append meeting notes to a shared doc',
+    'Add new sections to an existing document',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      document_id: {
+        type: 'string',
+        description: 'Google Doc ID from the URL',
+      },
+      content: {
+        type: 'string',
+        description: 'Text content to append to the document',
+      },
+    },
+    required: ['document_id', 'content'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/documents'],
+    });
+    const docs = google.docs({ version: 'v1', auth: auth as any });
+
+    try {
+      // Get current doc to find the end index
+      const doc = await docs.documents.get({ documentId: input.document_id });
+      const body = doc.data.body?.content ?? [];
+      const lastElement = body[body.length - 1];
+      const endIndex = (lastElement?.endIndex ?? 2) - 1;
+
+      await docs.documents.batchUpdate({
+        documentId: input.document_id,
+        requestBody: {
+          requests: [{
+            insertText: {
+              location: { index: endIndex },
+              text: input.content,
+            },
+          }],
+        },
+      });
+
+      return {
+        success: true,
+        document_id: input.document_id,
+        characters_appended: input.content.length,
+      };
+    } catch (error: any) {
+      return { success: false, error: `Google Docs API error: ${error.message}` };
+    }
+  },
+};
+
+export const googleDocsUpdate: Tool = {
+  name: 'google_docs_update',
+  description: 'Replace the entire content of a Google Doc with new text, or insert text at a specific position. For appending, use google_docs_append instead.',
+  category: 'storage',
+  requiredEnv: ['GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY'],
+  use_cases: [
+    'Rewrite a Google Doc with new content',
+    'Replace document content with an updated version',
+    'Insert text at a specific position in a document',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      document_id: {
+        type: 'string',
+        description: 'Google Doc ID from the URL (the long string between /d/ and /edit)',
+      },
+      content: {
+        type: 'string',
+        description: 'New text content for the document',
+      },
+      mode: {
+        type: 'string',
+        enum: ['replace', 'insert'],
+        description: 'replace: clear doc and write new content. insert: insert at position (default: replace)',
+      },
+      insert_index: {
+        type: 'number',
+        description: 'Character index to insert at (only for insert mode, default: 1 = start of doc)',
+      },
+    },
+    required: ['document_id', 'content'],
+  },
+
+  async handler(input: any, ctx: ToolContext) {
+    const serviceAccountKeyJson = ctx.credentials.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKeyJson) {
+      throw new Error('Google Drive credentials required. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY environment variable.');
+    }
+
+    const serviceAccountKey = JSON.parse(serviceAccountKeyJson);
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountKey,
+      scopes: ['https://www.googleapis.com/auth/documents'],
+    });
+    const docs = google.docs({ version: 'v1', auth: auth as any });
+
+    try {
+      const mode = input.mode || 'replace';
+      const requests: any[] = [];
+
+      if (mode === 'replace') {
+        const doc = await docs.documents.get({ documentId: input.document_id });
+        const body = doc.data.body?.content ?? [];
+        const lastElement = body[body.length - 1];
+        const endIndex = (lastElement?.endIndex ?? 2) - 1;
+
+        if (endIndex > 1) {
+          requests.push({
+            deleteContentRange: {
+              range: { startIndex: 1, endIndex },
+            },
+          });
+        }
+        requests.push({
+          insertText: {
+            location: { index: 1 },
+            text: input.content,
+          },
+        });
+      } else {
+        const insertIndex = input.insert_index ?? 1;
+        requests.push({
+          insertText: {
+            location: { index: insertIndex },
+            text: input.content,
+          },
+        });
+      }
+
+      await docs.documents.batchUpdate({
+        documentId: input.document_id,
+        requestBody: { requests },
+      });
+
+      return {
+        success: true,
+        document_id: input.document_id,
+        mode,
+        characters_written: input.content.length,
+      };
+    } catch (error: any) {
+      return { success: false, error: `Google Docs API error: ${error.message}` };
+    }
+  },
+};
+
 export const googleDriveTools = [
   googleDriveListFiles,
   googleDriveSearch,
@@ -712,6 +1279,13 @@ export const googleDriveTools = [
   googleDriveDownloadFile,
   googleDriveCreateFolder,
   googleDriveCreateGoogleDoc,
+  googleDriveCreateGoogleSheet,
+  googleSheetsRead,
+  googleSheetsList,
+  googleSheetsWrite,
+  googleDocsRead,
+  googleDocsAppend,
+  googleDocsUpdate,
   googleDriveShareFile,
   googleDriveDeleteFile,
   googleDriveMoveFile,
