@@ -71,7 +71,7 @@ async function loadAdditionalToolsForExport(): Promise<void> {
   // Find all subdirectories with index.js
   const entries = fs.readdirSync(additionalToolsDir, { withFileTypes: true });
   const categories = entries
-    .filter(e => e.isDirectory() && e.name !== 'example')
+    .filter(e => (e.isDirectory() || e.isSymbolicLink()) && e.name !== 'example')
     .filter(e => fs.existsSync(path.join(additionalToolsDir, e.name, 'index.js')))
     .map(e => e.name);
 
