@@ -49,3 +49,33 @@ Mattermost works for bot-to-human and bot-to-bot messaging at human speed. For s
 1. **(Now)** Keep universal agents, restart manually when code changes
 2. **(Soon)** Refactor: move swarm execution into coordinator, drop universal agents for on-device swarms (~2-3h)
 3. **(Later)** Rebuild cross-device swarms on a networked NATS bus with per-bot subjects and credential injection
+
+---
+
+## Multi-Channel Messaging: Beyond Mattermost
+
+### Current State
+
+The MattermostListener is tightly coupled to Mattermost's WebSocket API, but the Coordinator and tool system are already platform-agnostic (`ToolContext.platform` supports multiple platforms, `tasks.from-chat.{BOT_ID}` exists as an unused generic inbound subject).
+
+### Architecture: Hermes Frontend + NimbleCo Tool Backend
+
+Rather than rebuilding platform adapters in TypeScript, use Hermes (which already has production Telegram, Discord, Slack, Matrix support) as the messaging frontend. NimbleCo provides the tool backend via its api-server. Swarm-Map wires them together.
+
+```
+Platform User → Hermes (owns bot token, manages sessions)
+                    → Swarm-Map (policy, credentials, audit)
+                        → NimbleCo api-server (tool execution)
+```
+
+Each agent registers its own bot via BotFather. Tokens managed per-agent in Swarm-Map.
+
+### Phases
+
+1. **Make Coordinator platform-agnostic** (~2-3h): Add generic `platform`, `chat_channel`, `chat_thread`, `chat_user` fields alongside existing `mattermost_*` fields. Refactor `postToChatPlatform()` to publish to `messages.to-${platform}`. Zero risk to Mattermost.
+
+2. **Hermes Telegram integration** (~2-3 days): Register Hermes agent in Swarm-Map with `parentAgentId` → NimbleCo. Hermes handles Telegram, routes tool calls through Swarm-Map proxy to NimbleCo tools.
+
+3. **Egregore integration** (when ready): Hermes instance per egregore via `/summon`. Coexists with existing relay bot (`bin/notify.sh` for notifications, Hermes for conversation).
+
+4. **Port MattermostListener to generic format** (future): Refactor MattermostListener to use the same generic payload fields, making it one adapter among many rather than the hardcoded default.
