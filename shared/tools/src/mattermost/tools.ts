@@ -53,6 +53,70 @@ function createTool<T extends z.ZodType<any>>(config: {
 }
 
 // ============================================================================
+// List Channels
+// ============================================================================
+
+export const listChannels = createTool({
+  name: 'list_mattermost_channels',
+  description: 'List channels the bot has access to. Returns channel IDs needed for posting messages. The bot is typically a member of one team — this lists that team\'s channels.',
+  category: 'communication',
+  use_cases: [
+    'Find a channel ID to post a message to',
+    'See what channels the bot can access',
+    'Look up channel details before posting',
+  ],
+  inputSchema: z.object({}),
+  handler: async (_input, context) => {
+    const config = getMattermostConfig(context);
+
+    try {
+      // Get bot's own user info
+      const meResponse = await fetch(`${config.url}/api/v4/users/me`, {
+        headers: { 'Authorization': `Bearer ${config.token}` },
+      });
+      if (!meResponse.ok) throw new Error(`Failed to get bot info: ${meResponse.statusText}`);
+      const me = await meResponse.json() as any;
+
+      // Get teams the bot belongs to
+      const teamsResponse = await fetch(`${config.url}/api/v4/users/${me.id}/teams`, {
+        headers: { 'Authorization': `Bearer ${config.token}` },
+      });
+      if (!teamsResponse.ok) throw new Error(`Failed to get teams: ${teamsResponse.statusText}`);
+      const teams = await teamsResponse.json() as any[];
+
+      // Get channels for each team
+      const result: Array<{ team: string; team_id: string; channels: Array<{ id: string; name: string; display_name: string; type: string }> }> = [];
+
+      for (const team of teams) {
+        const channelsResponse = await fetch(`${config.url}/api/v4/users/${me.id}/teams/${team.id}/channels`, {
+          headers: { 'Authorization': `Bearer ${config.token}` },
+        });
+        if (!channelsResponse.ok) continue;
+        const channels = await channelsResponse.json() as any[];
+
+        result.push({
+          team: team.display_name,
+          team_id: team.id,
+          channels: channels
+            .filter((c: any) => c.type !== 'D' && c.type !== 'G') // exclude DMs and group messages
+            .map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              display_name: c.display_name,
+              type: c.type === 'O' ? 'public' : c.type === 'P' ? 'private' : c.type,
+            }))
+            .sort((a: any, b: any) => a.name.localeCompare(b.name)),
+        });
+      }
+
+      return { success: true, teams: result };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  },
+});
+
+// ============================================================================
 // Download Attachment
 // ============================================================================
 
@@ -402,6 +466,7 @@ export const addReaction = createTool({
 // ============================================================================
 
 export const mattermostTools: Tool[] = [
+  listChannels,
   downloadAttachment,
   postMessage,
   postWithAttachment,
