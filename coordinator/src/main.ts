@@ -3,14 +3,14 @@
  * NimbleCo Coordinator
  *
  * Central orchestration service that:
- * 1. Receives tasks from chat platforms (Mattermost) via NATS
+ * 1. Receives tasks from chat platforms (Mattermost, Telegram, etc.) via NATS
  * 2. Handles tasks directly or decomposes into subtasks for agents
  * 3. Dispatches to universal agents via NATS for swarm processing
- * 4. Aggregates results and posts responses back to chat
+ * 4. Aggregates results and posts responses back to the originating platform
  *
  * Architecture:
- * - MattermostListener: Receives mentions, classifies messages, dispatches tasks
- * - Coordinator: Orchestrates task handling, tool calling, and agent swarms
+ * - Platform Listeners: Receive messages, classify, dispatch tasks via NATS
+ * - Coordinator: Orchestrates task handling, tool calling, and agent swarms (platform-agnostic)
  * - Universal Agents: Stateless workers that can assume any role with any tools
  */
 
@@ -102,6 +102,25 @@ interface AgentResponse {
   error?: string;
 }
 
+/** Resolved platform context from a task payload — platform-agnostic fields */
+interface PlatformContext {
+  platform: string;
+  roomId: string | undefined;
+  eventId: string | undefined;
+  userId: string;
+}
+
+/** Extract platform context from a task payload.
+ *  Generic fields (chat_*) take priority, then platform-specific fallbacks. */
+function resolvePlatformContext(payload: any): PlatformContext {
+  return {
+    platform: payload?.platform || (payload?.mattermost_channel ? 'mattermost' : 'matrix'),
+    roomId: payload?.chat_channel || payload?.matrix_room || payload?.mattermost_channel,
+    eventId: payload?.chat_thread || payload?.matrix_event || payload?.mattermost_thread,
+    userId: payload?.chat_user || payload?.matrix_user || payload?.mattermost_user || 'unknown',
+  };
+}
+
 class Coordinator {
   private nc!: NatsConnection;
   private llmRouter: LLMRouter;
@@ -111,6 +130,7 @@ class Coordinator {
   private publishedMessages: Set<string> = new Set(); // Track published messages to prevent duplicates
   private botId: string;
   private policyClient: PolicyClient;
+  private currentPlatform: string = 'mattermost'; // Active platform for current task (set per-invocation)
 
   constructor() {
     // Get bot ID from environment (defaults to 'default' for single-bot setups)
@@ -384,6 +404,10 @@ class Coordinator {
   private async handleTaskDirectly(task: Task): Promise<void> {
     console.log('🎯 Orchestrator handling task directly');
 
+    // Resolve platform-agnostic context from task payload
+    const pctx = resolvePlatformContext(task.payload);
+    this.currentPlatform = pctx.platform;
+
     const description = task.payload?.description || JSON.stringify(task.payload);
     // Build credentials from environment variables
     // Use the exact env var names that tools expect (e.g., NOTION_API_KEY, not notion_token)
@@ -410,18 +434,18 @@ class Coordinator {
     }
 
     const context: ToolContext = {
-      user_id: task.payload?.matrix_user || task.payload?.mattermost_user || 'orchestrator',
-      platform: 'matrix',
+      user_id: pctx.userId || 'orchestrator',
+      platform: pctx.platform as ToolContext['platform'],
       credentials,
-      room_id: task.payload?.matrix_room || task.payload?.mattermost_channel,
+      room_id: pctx.roomId,
     };
 
     // Start invocation logging
     const logger = new InvocationLogger();
     const invocationId = await logger.startInvocation({
-      conversationId: task.payload?.matrix_room || task.payload?.mattermost_channel || 'unknown',
-      triggerUserId: task.payload?.matrix_user || task.payload?.mattermost_user || 'unknown',
-      triggerEventId: task.payload?.matrix_event || undefined,
+      conversationId: pctx.roomId || 'unknown',
+      triggerUserId: pctx.userId || 'unknown',
+      triggerEventId: pctx.eventId || undefined,
       inputMessage: description,
       taskType: task.type,
       botId: this.botId,
@@ -438,9 +462,9 @@ class Coordinator {
     // This filters the tool schema BEFORE sending to LLM to reduce context window
     // and prevent LLM from attempting to use unauthorized tools
     const toolContext: ToolContext = {
-      user_id: task.payload?.mattermost_user || task.payload?.matrix_user || 'unknown',
-      platform: task.payload?.mattermost_channel ? 'mattermost' : 'matrix',
-      room_id: task.payload?.mattermost_channel || task.payload?.matrix_room || 'unknown',
+      user_id: pctx.userId,
+      platform: pctx.platform as ToolContext['platform'],
+      room_id: pctx.roomId || 'unknown',
       credentials: {},
       invocation_id: invocationId ?? undefined
     };
@@ -487,20 +511,20 @@ ${ex.assistant_response ? `You: ${ex.assistant_response}` : '(no response record
 This gives you context about the ongoing conversation. If you need to look further back, use view_recent_invocations.
 ` : '';
 
-    const mattermostContext = task.payload?.mattermost_thread ? `
+    const platformContext = pctx.eventId ? `
 
 ## Message Context
 
-This message was sent in Mattermost:
-- Post ID: ${task.payload.mattermost_thread}
-- Channel ID: ${task.payload.mattermost_channel}
-- User ID: ${task.payload.mattermost_user}
+This message was sent via ${pctx.platform}:
+- Thread/Post ID: ${pctx.eventId}
+- Channel/Chat ID: ${pctx.roomId}
+- User ID: ${pctx.userId}
 ${threadContextStr}${lastExchangeStr}
-When the user says "this message" or "react to this", they mean post ID: ${task.payload.mattermost_thread}
+When the user says "this message" or "react to this", they mean ID: ${pctx.eventId}
 ` : '';
 
     // Multi-agent awareness context
-    const senderUsername = task.payload?.sender_username || task.payload?.mattermost_user || 'unknown';
+    const senderUsername = task.payload?.sender_username || pctx.userId;
     const senderIsBot = task.payload?.sender_is_bot || false;
     const knownBots = task.payload?.known_bots || [];
     const multiAgentContext = knownBots.length > 0 ? `
@@ -616,7 +640,7 @@ OTHER IMPORTANT NOTES:
   * File Conversion: convert_csv_json, read_excel, write_excel, convert_yaml_json, convert_json_yaml, parse_csv, generate_csv
 - When asked to perform NLP analysis or statistics, use the built-in data science tools`;
 
-    const dynamicContext = `${mattermostContext}${multiAgentContext}
+    const dynamicContext = `${platformContext}${multiAgentContext}
 
 User's request: ${description}`;
 
@@ -647,8 +671,8 @@ User's request: ${description}`;
     let attachmentRetries = 0; // Track how many times we've prompted to attach
 
     // Get chat platform info for progress updates
-    const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-    const eventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+    const roomId = pctx.roomId;
+    const eventId = pctx.eventId;
 
     try {
       while (iterations < maxIterations) {
@@ -901,7 +925,7 @@ User's request: ${description}`;
               // Post final result WITH chart attachment
               const attachContext: ToolContext = {
                 platform: 'mattermost',
-                user_id: task.payload?.mattermost_user || 'system',
+                user_id: pctx.userId || 'system',
                 credentials: {
                   mattermost_url: process.env.MATTERMOST_URL || '',
                   mattermost_token: process.env.MATTERMOST_BOT_TOKEN || '',
@@ -972,13 +996,13 @@ User's request: ${description}`;
       } catch (error) {
         console.error('Error handling task directly:', error);
 
-        const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-        const eventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+        const errCtx = resolvePlatformContext(task.payload);
+        this.currentPlatform = errCtx.platform;
 
-        if (roomId) {
+        if (errCtx.roomId) {
           await this.postToChatPlatform(
-            roomId,
-            eventId,
+            errCtx.roomId,
+            errCtx.eventId,
             `❌ Error: ${error}`,
             false  // Error as threaded reply
           );
@@ -1010,8 +1034,8 @@ User's request: ${description}`;
         default:
           console.log(`⚠️  Unknown task type: ${task.type}`);
 
-          const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-          const eventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+          const roomId = resolvePlatformContext(task.payload).roomId;
+          const eventId = resolvePlatformContext(task.payload).eventId;
 
           if (roomId) {
             await this.postToChatPlatform(
@@ -1040,7 +1064,7 @@ User's request: ${description}`;
     console.log('🔍 Orchestrating PR review...');
 
     const { pr_url, pr_number } = task.payload;
-    const triggerUserId = task.payload.mattermost_user;
+    const triggerUserId = resolvePlatformContext(task.payload).userId;
     const isAdmin = task.payload.is_admin || false;
     const swarmDepth = (task.swarm_depth || 0) + 1;
 
@@ -1104,7 +1128,7 @@ User's request: ${description}`;
   private async handleSecurityScan(task: Task) {
     console.log('🔒 Running security scan...');
 
-    const triggerUserId = task.payload.mattermost_user;
+    const triggerUserId = resolvePlatformContext(task.payload).userId;
     const isAdmin = task.payload.is_admin || false;
     const swarmDepth = (task.swarm_depth || 0) + 1;
 
@@ -1119,7 +1143,7 @@ User's request: ${description}`;
   private async handleTestRun(task: Task) {
     console.log('🧪 Running tests...');
 
-    const triggerUserId = task.payload.mattermost_user;
+    const triggerUserId = resolvePlatformContext(task.payload).userId;
     const isAdmin = task.payload.is_admin || false;
     const swarmDepth = (task.swarm_depth || 0) + 1;
 
@@ -1135,15 +1159,15 @@ User's request: ${description}`;
     console.log('🎯 Handling custom task (multi-agent)...');
 
     const description = task.payload?.description || JSON.stringify(task.payload);
-    const triggerUserId = task.payload.mattermost_user;
+    const triggerUserId = resolvePlatformContext(task.payload).userId;
     const isAdmin = task.payload.is_admin || false;
     const swarmDepth = (task.swarm_depth || 0) + 1;
 
     // Check swarm depth before spawning more agents
     if (swarmDepth > MAX_SWARM_DEPTH) {
       console.log(`🚫 Swarm depth ${swarmDepth} exceeds max ${MAX_SWARM_DEPTH} - blocking recursive spawn`);
-      const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-      const eventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+      const roomId = resolvePlatformContext(task.payload).roomId;
+      const eventId = resolvePlatformContext(task.payload).eventId;
       if (roomId) {
         await this.postToChatPlatform(
           roomId,
@@ -1215,8 +1239,8 @@ Example parallel swarm:
         }
       } catch (e) {
         console.error('Failed to parse swarm config:', e);
-        const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-        const eventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+        const roomId = resolvePlatformContext(task.payload).roomId;
+        const eventId = resolvePlatformContext(task.payload).eventId;
         if (roomId) {
           await this.postToChatPlatform(
             roomId,
@@ -1247,8 +1271,8 @@ Example parallel swarm:
       console.log(`🐝 Spawning ${agents.length} agents (mode: ${mode}${mode === 'conversation' ? `, ${maxTurns} turns` : ''})`);
 
       // Post acknowledgment
-      const roomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-      const eventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+      const roomId = resolvePlatformContext(task.payload).roomId;
+      const eventId = resolvePlatformContext(task.payload).eventId;
       const modeDesc = mode === 'conversation' ? `conversation mode (${maxTurns} turns)` : 'parallel mode';
       if (roomId) {
         await this.postToChatPlatform(
@@ -1282,8 +1306,8 @@ Example parallel swarm:
 
     } catch (error) {
       console.error('Error handling swarm task:', error);
-      const errRoomId = task.payload?.matrix_room || task.payload?.mattermost_channel;
-      const errEventId = task.payload?.matrix_event || task.payload?.mattermost_thread;
+      const errRoomId = resolvePlatformContext(task.payload).roomId;
+      const errEventId = resolvePlatformContext(task.payload).eventId;
       if (errRoomId) {
         await this.postToChatPlatform(
           errRoomId,
@@ -1617,18 +1641,20 @@ Provide a concise summary highlighting:
     console.log('🐝 Handling swarm task...');
     console.log('Task payload:', JSON.stringify(task.payload, null, 2));
 
-    const { agents, description, context, matrix_room, matrix_event } = task.payload;
-    const triggerUserId = task.payload.mattermost_user;
+    const { agents, description, context } = task.payload;
+    const sctx = resolvePlatformContext(task.payload);
+    this.currentPlatform = sctx.platform;
+    const triggerUserId = sctx.userId;
     const isAdmin = task.payload.is_admin || false;
     const swarmDepth = (task.swarm_depth || 0) + 1;
 
     // Check swarm depth before spawning
     if (swarmDepth > MAX_SWARM_DEPTH) {
       console.log(`🚫 Swarm depth ${swarmDepth} exceeds max ${MAX_SWARM_DEPTH} - blocking recursive spawn`);
-      if (matrix_room) {
+      if (sctx.roomId) {
         await this.postToChatPlatform(
-          matrix_room,
-          matrix_event,
+          sctx.roomId,
+          sctx.eventId,
           `🚫 **Swarm depth limit reached** (${swarmDepth}/${MAX_SWARM_DEPTH})\n\nAgents cannot spawn more agents beyond this depth.`
         );
       }
@@ -1636,10 +1662,10 @@ Provide a concise summary highlighting:
     }
 
     // Post status update
-    if (matrix_room) {
+    if (sctx.roomId) {
       await this.postToChatPlatform(
-        matrix_room,
-        matrix_event,
+        sctx.roomId,
+        sctx.eventId,
         `🐝 Starting swarm execution...\n\n**Agents spawning:**\n${agents.map((a: any) => `- ${a.count}x ${a.type}: ${a.role}`).join('\n')}`
       );
     }
@@ -1674,10 +1700,10 @@ Provide a concise summary highlighting:
     await Promise.all(agentPromises);
 
     // Post completion
-    if (matrix_room) {
+    if (sctx.roomId) {
       await this.postToChatPlatform(
-        matrix_room,
-        matrix_event,
+        sctx.roomId,
+        sctx.eventId,
         `✅ Swarm execution complete!\n\nNote: Dynamic agent spawning is not yet implemented. Currently only using existing agents (code-review, security, test-runner).`
       );
     }
@@ -1868,8 +1894,10 @@ ${data.agents.map((a: any) => `- ${a.agent}: ${a.status}`).join('\n')}
     eventId: string | undefined,
     message: string,
     isFinalResult: boolean = false,
-    invocationId?: string
+    invocationId?: string,
+    platform?: string
   ) {
+    platform = platform || this.currentPlatform || 'mattermost';
     // Create unique key for this message to prevent duplicate publishing
     const messageKey = `${roomId}:${eventId || 'none'}:${isFinalResult}:${invocationId || 'none'}:${message.substring(0, 100)}`;
 
@@ -1887,7 +1915,7 @@ ${data.agents.map((a: any) => `- ${a.agent}: ${a.status}`).join('\n')}
       toDelete.forEach(key => this.publishedMessages.delete(key));
     }
 
-    // Publish to NATS for mattermost-listener to handle
+    // Publish to NATS for the appropriate platform listener to handle
     const messageData = {
       bot_id: this.botId, // Route to correct bot when multiple bots running
       channel_id: roomId,
@@ -1897,8 +1925,9 @@ ${data.agents.map((a: any) => `- ${a.agent}: ${a.status}`).join('\n')}
       invocation_id: invocationId, // For linking reactions/feedback
     };
 
-    this.nc.publish('messages.to-mattermost', sc.encode(JSON.stringify(messageData)));
-    console.log(`📨 Published ${isFinalResult ? 'final result' : 'update'} to chat platform via NATS`);
+    const subject = `messages.to-${platform}`;
+    this.nc.publish(subject, sc.encode(JSON.stringify(messageData)));
+    console.log(`📨 Published ${isFinalResult ? 'final result' : 'update'} to ${platform} via NATS (${subject})`);
   }
 
   /**

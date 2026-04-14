@@ -3,7 +3,7 @@
 
 export interface ToolContext {
   user_id: string;
-  platform: 'signal' | 'mattermost' | 'discord' | 'matrix';
+  platform: 'signal' | 'mattermost' | 'discord' | 'matrix' | 'telegram';
   credentials: Record<string, string>;
   // Conversation history for context-aware caching
   conversation_id?: string;

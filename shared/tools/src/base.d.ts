@@ -1,6 +1,6 @@
 export interface ToolContext {
     user_id: string;
-    platform: 'signal' | 'mattermost' | 'discord' | 'matrix';
+    platform: 'signal' | 'mattermost' | 'discord' | 'matrix' | 'telegram';
     credentials: Record<string, string>;
     conversation_id?: string;
     room_id?: string;
@@ -58,3 +58,4 @@ export declare class TieredToolLoader {
     getToolsForTask(task: string): Tool[];
     searchTools(query: string): Tool[];
 }
+//# sourceMappingURL=base.d.ts.map
