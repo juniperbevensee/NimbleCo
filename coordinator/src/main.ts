@@ -664,7 +664,7 @@ User's request: ${description}`;
 
     // Agentic loop: LLM decides which tools to use
     let iterations = 0;
-    const maxIterations = 10; // Increased from 5 to allow for: explore → process → create → attach workflows
+    const maxIterations = 40; // Allow long tool-use chains (e.g. creating many Notion pages)
     let result: any = null;
     let chartToolCalled = false;
     let attachmentMade = false;
