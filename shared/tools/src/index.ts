@@ -259,7 +259,7 @@ export class SmartToolSelector {
       // Most commonly used tools - these get cached in system prompt
       ...this.registry.getByCategory('crm').slice(0, 3),
       ...this.registry.getByCategory('meetings').slice(0, 2),
-      ...this.registry.getByCategory('docs').slice(0, 3),
+      ...this.registry.getByCategory('docs'),
       // Memory and workspace tools should ALWAYS be available since system prompt references them
       ...this.registry.getByCategory('storage').filter(t =>
         t.name === 'read_agent_memory' ||

@@ -25,7 +25,9 @@ function filterConfiguredTools(tools) {
 }
 // Tool registry - simple discovery
 class ToolRegistry {
-    tools = new Map();
+    constructor() {
+        this.tools = new Map();
+    }
     register(tool) {
         this.tools.set(tool.name, tool);
     }
@@ -54,7 +56,6 @@ class ToolRegistry {
 exports.ToolRegistry = ToolRegistry;
 // Tiered tool loading strategy
 class TieredToolLoader {
-    registry;
     constructor(registry) {
         this.registry = registry;
     }
@@ -85,3 +86,4 @@ class TieredToolLoader {
     }
 }
 exports.TieredToolLoader = TieredToolLoader;
+//# sourceMappingURL=base.js.map
