@@ -375,8 +375,10 @@ class Coordinator {
       const description = payload?.description || JSON.stringify(payload);
       console.log(`🔍 Custom task: ${description.substring(0, 100)}`);
 
-      // Check if it explicitly mentions spawning agents/swarms
-      if (description.match(/\b(spawn|create|spin up).*(agent|swarm)/i)) {
+      // Check if it explicitly asks to spawn agents/swarms.
+      // Merely @mentioning other bots (e.g. "tell @hermes-personal about X")
+      // is NOT a swarm request — it's a normal message that references them.
+      if (description.match(/\b(spawn|create|spin up|launch)\s+(a\s+)?(new\s+)?(agent|swarm|multi-agent)/i)) {
         console.log(`  → Delegating (multi-agent request)`);
         return 'delegate';
       }
@@ -1238,14 +1240,17 @@ Example parallel swarm:
           throw new Error('No valid JSON found');
         }
       } catch (e) {
-        console.error('Failed to parse swarm config:', e);
+        // The LLM returned a natural language response instead of JSON swarm config.
+        // This usually means the message wasn't actually a swarm request — just post
+        // the LLM's response as a normal reply instead of showing a parse error.
+        console.log('Swarm parse failed — treating as normal response');
         const roomId = resolvePlatformContext(task.payload).roomId;
         const eventId = resolvePlatformContext(task.payload).eventId;
-        if (roomId) {
+        if (roomId && response.content) {
           await this.postToChatPlatform(
             roomId,
             eventId,
-            `❌ Sorry, I couldn't parse the agent request. Please try rephrasing.`,
+            response.content,
             false
           );
         }
