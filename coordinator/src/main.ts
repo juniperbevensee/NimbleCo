@@ -131,6 +131,7 @@ class Coordinator {
   private botId: string;
   private policyClient: PolicyClient;
   private currentPlatform: string = 'mattermost'; // Active platform for current task (set per-invocation)
+  private cascadeOrder: string[] | undefined;
 
   constructor() {
     // Get bot ID from environment (defaults to 'default' for single-bot setups)
@@ -142,6 +143,13 @@ class Coordinator {
     // Initialize LLM router with cost limit
     const dailyLimit = parseFloat(process.env.LLM_DAILY_COST_LIMIT || '10');
     this.llmRouter = new LLMRouter(dailyLimit);
+
+    // Read per-agent cascade order from environment (set via Swarm-Map agent metadata)
+    const cascadeOrderEnv = process.env.LLM_CASCADE_ORDER;
+    if (cascadeOrderEnv) {
+      this.cascadeOrder = cascadeOrderEnv.split(',').map(s => s.trim()).filter(Boolean);
+      console.log(`🔀 Custom LLM cascade order: ${this.cascadeOrder.join(' → ')}`);
+    }
 
     // Register available LLM providers
     this.setupLLMProviders();
@@ -709,7 +717,7 @@ User's request: ${description}`;
         }
 
         const llmCallStart = Date.now();
-        const response = await this.llmRouter.chat(taskType, messages, llmTools);
+        const response = await this.llmRouter.chat(taskType, messages, llmTools, undefined, this.cascadeOrder);
         const llmCallDuration = Date.now() - llmCallStart;
 
         console.log(`  Model: ${response.provider}/${response.model}`);
@@ -1081,7 +1089,7 @@ User's request: ${description}`;
       Return JSON array of subtasks with {agent, instructions}.`
     }];
 
-    const planResponse = await this.llmRouter.chat('quick', messages);
+    const planResponse = await this.llmRouter.chat('quick', messages, undefined, undefined, this.cascadeOrder);
     console.log('📝 Task plan created');
 
     // Step 2: Dispatch to agents in parallel
@@ -1219,7 +1227,7 @@ Example parallel swarm:
     }];
 
     try {
-      const response = await this.llmRouter.chat('complex', messages);
+      const response = await this.llmRouter.chat('complex', messages, undefined, undefined, this.cascadeOrder);
       console.log('📋 Swarm plan:', response.content.substring(0, 300));
 
       // Parse swarm config - extract JSON from response
@@ -1433,7 +1441,7 @@ Synthesize these responses into a coherent, unified response for the user. Highl
       }];
 
       try {
-        const summaryResponse = await this.llmRouter.chat('complex', messages);
+        const summaryResponse = await this.llmRouter.chat('complex', messages, undefined, undefined, this.cascadeOrder);
         console.log('📝 Generated summary for parallel swarm');
 
         const statusLine = partialResults > 0
@@ -1622,7 +1630,7 @@ Provide a concise summary highlighting:
         const summaryResponse = await this.llmRouter.chat('complex', [{
           role: 'user',
           content: summaryPrompt
-        }]);
+        }], undefined, undefined, this.cascadeOrder);
 
         await this.postToChatPlatform(
           roomId,
