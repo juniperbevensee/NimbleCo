@@ -923,7 +923,8 @@ export class LLMRouter {
     taskType: 'quick' | 'code' | 'complex' | string,
     messages: LLMMessage[],
     tools?: LLMTool[],
-    allowedProviders?: Set<string>
+    allowedProviders?: Set<string>,
+    cascadeOrder?: string[]
   ): Promise<LLMResponse> {
     // Check if taskType is actually a specific model name
     if (this.adapters.has(taskType)) {
@@ -936,7 +937,7 @@ export class LLMRouter {
     }
 
     // Get prioritized list of adapters to try (filtered by allowed providers if set)
-    const adaptersToTry = this.getAdapterPriorityList(taskType, allowedProviders);
+    const adaptersToTry = this.getAdapterPriorityList(taskType, allowedProviders, cascadeOrder);
 
     let lastError: Error | null = null;
 
@@ -976,7 +977,8 @@ export class LLMRouter {
 
   private getAdapterPriorityList(
     taskType: string,
-    allowedProviders?: Set<string>
+    allowedProviders?: Set<string>,
+    cascadeOrder?: string[]
   ): Array<{ name: string; adapter: LLMAdapter }> {
     const priorityList: Array<{ name: string; adapter: LLMAdapter }> = [];
 
@@ -991,22 +993,31 @@ export class LLMRouter {
       }
     };
 
-    // For ALL tasks, try cloud providers first (they're faster and more reliable)
-    // Priority: Bedrock > Anthropic > Vertex > Google AI > Ollama
-    // Bedrock and Anthropic (both Claude) are much better at multi-step tool use
-    if (this.dailyCost < this.dailyLimit) {
-      tryAddAdapter('bedrock');
-      tryAddAdapter('anthropic');
-      tryAddAdapter('vertex');
-      tryAddAdapter('google-ai');
-    }
+    // Use custom cascade order if provided and non-empty
+    if (cascadeOrder && cascadeOrder.length > 0) {
+      for (const name of cascadeOrder) {
+        // Cloud providers still respect daily cost limit
+        const isLocal = name.startsWith('ollama');
+        if (isLocal || this.dailyCost < this.dailyLimit) {
+          tryAddAdapter(name);
+        }
+      }
+    } else {
+      // Default order: Bedrock > Anthropic > Vertex > Google AI > Ollama
+      if (this.dailyCost < this.dailyLimit) {
+        tryAddAdapter('bedrock');
+        tryAddAdapter('anthropic');
+        tryAddAdapter('vertex');
+        tryAddAdapter('google-ai');
+      }
 
-    // Add local Ollama models as final fallback
-    if (!priorityList.some(p => p.name === 'ollama-code')) {
-      tryAddAdapter('ollama-code');
-    }
-    if (!priorityList.some(p => p.name === 'ollama-quick')) {
-      tryAddAdapter('ollama-quick');
+      // Add local Ollama models as final fallback
+      if (!priorityList.some(p => p.name === 'ollama-code')) {
+        tryAddAdapter('ollama-code');
+      }
+      if (!priorityList.some(p => p.name === 'ollama-quick')) {
+        tryAddAdapter('ollama-quick');
+      }
     }
 
     // If still nothing, add all available adapters
@@ -1023,8 +1034,8 @@ export class LLMRouter {
     return priorityList;
   }
 
-  private selectAdapter(taskType: string, allowedProviders?: Set<string>): LLMAdapter {
-    const priorityList = this.getAdapterPriorityList(taskType, allowedProviders);
+  private selectAdapter(taskType: string, allowedProviders?: Set<string>, cascadeOrder?: string[]): LLMAdapter {
+    const priorityList = this.getAdapterPriorityList(taskType, allowedProviders, cascadeOrder);
     return priorityList[0].adapter;
   }
 
