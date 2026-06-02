@@ -1,3 +1,8 @@
+# Pin the Compose project name so container/network/volume names stay stable
+# (e.g. nimbleco_postgres_data) regardless of the working-directory name.
+# Without this, renaming the folder orphans the named data volumes.
+name: nimbleco
+
 services:
   # ============================================================================
   # CORE INFRASTRUCTURE
